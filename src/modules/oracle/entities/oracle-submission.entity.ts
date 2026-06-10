@@ -1,0 +1,58 @@
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+  Unique,
+} from 'typeorm';
+import { Project } from '../../projects/entities/project.entity';
+
+export enum SubmissionStatus {
+  PENDING = 'pending',
+  SUBMITTED = 'submitted',
+  CONFIRMED = 'confirmed',
+  FAILED = 'failed',
+}
+
+@Entity('oracle_submissions')
+@Unique(['projectId', 'oracleAddress', 'nonce'])
+export class OracleSubmission {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ name: 'project_id' })
+  @Index()
+  projectId: string;
+
+  @ManyToOne(() => Project, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'project_id' })
+  project: Project;
+
+  @Column({ name: 'oracle_address', type: 'varchar', length: 56 })
+  oracleAddress: string;
+
+  @Column({ type: 'int' })
+  nonce: number;
+
+  @Column({ name: 'tx_hash', type: 'varchar', length: 100 })
+  txHash: string;
+
+  @Column({ type: 'enum', enum: SubmissionStatus, default: SubmissionStatus.PENDING })
+  status: SubmissionStatus;
+
+  @Column({ name: 'readings_snapshot', type: 'jsonb' })
+  readingsSnapshot: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
+  result: Record<string, unknown> | null;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+}
