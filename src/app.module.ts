@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
@@ -11,6 +12,8 @@ import { OracleModule } from './modules/oracle/oracle.module';
 import { GovernanceModule } from './modules/governance/governance.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import stellarConfig from './config/stellar.config';
@@ -56,6 +59,10 @@ import oracleConfig from './config/oracle.config';
     GovernanceModule,
     AnalyticsModule,
     NotificationsModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}
