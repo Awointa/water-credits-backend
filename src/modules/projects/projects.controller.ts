@@ -1,4 +1,77 @@
-import { Controller } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ProjectsService } from './projects.service';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { QueryProjectsDto } from './dto/query-projects.dto';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { User, UserRole } from '../users/entities/user.entity';
+import { Project } from './entities/project.entity';
+import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 
 @Controller('projects')
-export class ProjectsController {}
+export class ProjectsController {
+  constructor(private readonly projectsService: ProjectsService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  async create(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateProjectDto,
+  ): Promise<Project> {
+    return this.projectsService.create(userId, dto);
+  }
+
+  @Get()
+  @Public()
+  async findAll(
+    @Query() query: QueryProjectsDto,
+  ): Promise<PaginatedResponseDto<Project>> {
+    const { data, total, page, limit } = await this.projectsService.findAll(query);
+    return PaginatedResponseDto.from(data, total, page, limit);
+  }
+
+  @Get(':id')
+  @Public()
+  async findById(@Param('id') id: string): Promise<Project> {
+    return this.projectsService.findById(id);
+  }
+
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateProjectDto,
+    @CurrentUser('id') userId: string,
+  ): Promise<Project> {
+    return this.projectsService.update(id, dto, userId);
+  }
+
+  @Patch(':id/status')
+  @Roles(UserRole.ADMIN, UserRole.VERIFIER)
+  @HttpCode(HttpStatus.OK)
+  async updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+  ): Promise<Project> {
+    return this.projectsService.updateStatus(id, status as any);
+  }
+
+  @Get('count/by-owner')
+  async countByOwner(@CurrentUser('id') userId: string): Promise<{ count: number }> {
+    const count = await this.projectsService.countByOwner(userId);
+    return { count };
+  }
+}
