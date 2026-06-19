@@ -14,7 +14,7 @@ export class StellarClient {
   private keypair: Keypair;
 
   constructor(private configService: ConfigService) {
-    const rpcUrl = this.configService.get<string>('stellar.rpcUrl');
+    const rpcUrl = this.configService.get<string>('stellar.rpcUrl')!;
     const backendSecret = this.configService.get<string>('stellar.backendSecret');
     
     this.server = new SorobanRpc.Server(rpcUrl);

@@ -6,6 +6,7 @@ import {
   Asset,
   Keypair,
   Operation,
+  SorobanRpc,
   TransactionBuilder,
   Networks,
   Horizon,
@@ -26,7 +27,7 @@ export class StellarService {
     private readonly configService: ConfigService,
     private readonly stellarClient: StellarClient,
   ) {
-    const horizonUrl = this.configService.get<string>('stellar.horizonUrl');
+    const horizonUrl = this.configService.get<string>('stellar.horizonUrl')!;
     this.horizon = new Horizon.Server(horizonUrl);
   }
 
@@ -46,8 +47,12 @@ export class StellarService {
   }
 
   // ── Network ──
-  async getAccount(address: string): Promise<Horizon.ServerApi.AccountRecord> {
+  async getAccount(address: string): Promise<Horizon.AccountResponse> {
     return this.horizon.loadAccount(address);
+  }
+
+  private async buildAccount(keypair: Keypair): Promise<Horizon.AccountResponse> {
+    return this.getAccount(keypair.publicKey());
   }
 
   async getNetwork() {
@@ -62,7 +67,7 @@ export class StellarService {
   private async callReadOnly(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<any> {
     const contract = new Contract(contractId);
     const tx = new TransactionBuilder(
-      new Account(Keypair.random().getPublicKey(), '0'),
+      new Account(Keypair.random().publicKey(), '0'),
       { fee: '100', networkPassphrase: (await this.getNetwork()).passphrase }
     )
       .addOperation(contract.call(method, ...args))
@@ -70,20 +75,21 @@ export class StellarService {
       .build();
 
     const simulation = await this.stellarClient.simulateTx(tx);
-    if (simulation.error) {
+    if (SorobanRpc.Api.isSimulationError(simulation)) {
       throw new Error(`Simulation failed: ${simulation.error}`);
     }
     
-    // In @stellar/stellar-sdk ^12.0.0, simulation.result is used differently.
-    // Assuming simple return value extraction
-    const result = simulation.results?.[0]?.result;
-    return result ? scValToNative(result) : null;
+    if (!SorobanRpc.Api.isSimulationSuccess(simulation) || !simulation.result) {
+      return null;
+    }
+    
+    return scValToNative(simulation.result.retval);
   }
 
   private async invokeContract(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<any> {
     const keypair = this.stellarClient.getKeypair();
     const network = await this.getNetwork();
-    const account = await this.getAccount(keypair.getPublicKey());
+    const account = await this.buildAccount(keypair);
 
     const contract = new Contract(contractId);
     let tx = new TransactionBuilder(account, {
