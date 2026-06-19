@@ -53,9 +53,7 @@ export class OracleProcessor {
       };
       await this.submissionRepo.save(submission);
 
-      this.logger.log(
-        `Oracle submission ${job.data.submissionId} confirmed on-chain`,
-      );
+      this.logger.log(`Oracle submission ${job.data.submissionId} confirmed on-chain`);
     } catch (error) {
       submission.status = SubmissionStatus.FAILED;
       await this.submissionRepo.save(submission);

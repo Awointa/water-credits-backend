@@ -8,9 +8,7 @@ import { ReadingBatch } from '../sensors/entities/reading-batch.entity';
 import { User } from '../users/entities/user.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Project, Retirement, ReadingBatch, User]),
-  ],
+  imports: [TypeOrmModule.forFeature([Project, Retirement, ReadingBatch, User])],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
   exports: [AnalyticsService],

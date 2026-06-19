@@ -1,4 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus, SetMetadata } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  HttpStatus,
+  SetMetadata,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
 export const RATE_LIMIT_KEY = 'rateLimit';
@@ -21,7 +28,9 @@ export class RateLimitGuard implements CanActivate {
       RATE_LIMIT_KEY,
       [context.getHandler(), context.getClass()],
     );
-    if (!limitMeta) return true;
+    if (!limitMeta) {
+      return true;
+    }
 
     const request = context.switchToHttp().getRequest();
     const key = request.ip || 'anonymous';

@@ -3,12 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { StellarClient } from './stellar.client';
 import {
   Account,
-  Asset,
   Keypair,
-  Operation,
   SorobanRpc,
   TransactionBuilder,
-  Networks,
   Horizon,
   Contract,
   xdr,
@@ -32,7 +29,7 @@ export class StellarService {
   }
 
   // ── Authentication ──
-  async generateChallenge(wallet: string): Promise<string> {
+  async generateChallenge(_wallet: string): Promise<string> {
     return `Login to Water Credits: ${Date.now()}`;
   }
 
@@ -64,12 +61,16 @@ export class StellarService {
 
   // ── Contract Invocation Helpers ──
 
-  private async callReadOnly(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<any> {
+  private async callReadOnly(
+    contractId: string,
+    method: string,
+    args: xdr.ScVal[] = [],
+  ): Promise<any> {
     const contract = new Contract(contractId);
-    const tx = new TransactionBuilder(
-      new Account(Keypair.random().publicKey(), '0'),
-      { fee: '100', networkPassphrase: (await this.getNetwork()).passphrase }
-    )
+    const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), '0'), {
+      fee: '100',
+      networkPassphrase: (await this.getNetwork()).passphrase,
+    })
       .addOperation(contract.call(method, ...args))
       .setTimeout(0)
       .build();
@@ -78,15 +79,19 @@ export class StellarService {
     if (SorobanRpc.Api.isSimulationError(simulation)) {
       throw new Error(`Simulation failed: ${simulation.error}`);
     }
-    
+
     if (!SorobanRpc.Api.isSimulationSuccess(simulation) || !simulation.result) {
       return null;
     }
-    
+
     return scValToNative(simulation.result.retval);
   }
 
-  private async invokeContract(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<any> {
+  private async invokeContract(
+    contractId: string,
+    method: string,
+    args: xdr.ScVal[] = [],
+  ): Promise<any> {
     const keypair = this.stellarClient.getKeypair();
     const network = await this.getNetwork();
     const account = await this.buildAccount(keypair);
@@ -109,9 +114,7 @@ export class StellarService {
   // ── Credit Token ──
 
   async getBalance(tokenId: string, address: string): Promise<BigNumber> {
-    const result = await this.callReadOnly(tokenId, 'balance', [
-      new Address(address).toScVal(),
-    ]);
+    const result = await this.callReadOnly(tokenId, 'balance', [new Address(address).toScVal()]);
     return new BigNumber(result?.toString() || '0');
   }
 
@@ -132,7 +135,12 @@ export class StellarService {
     ]);
   }
 
-  async retireCredits(tokenId: string, amount: BigNumber, purpose: string, metadataUri: string): Promise<any> {
+  async retireCredits(
+    tokenId: string,
+    amount: BigNumber,
+    purpose: string,
+    metadataUri: string,
+  ): Promise<any> {
     return this.invokeContract(tokenId, 'retire', [
       nativeToScVal(amount.toFixed(0), { type: 'i128' }),
       nativeToScVal(purpose, { type: 'string' }),
@@ -150,14 +158,17 @@ export class StellarService {
   }
 
   async getProjectContract(factoryId: string, projectId: string): Promise<string> {
-    return this.callReadOnly(factoryId, 'get', [
-      nativeToScVal(projectId, { type: 'string' }),
-    ]);
+    return this.callReadOnly(factoryId, 'get', [nativeToScVal(projectId, { type: 'string' })]);
   }
 
   // ── Oracle ──
 
-  async submitReading(oracleContractId: string, projectId: string, reading: any, nonce: number): Promise<any> {
+  async submitReading(
+    oracleContractId: string,
+    projectId: string,
+    reading: any,
+    nonce: number,
+  ): Promise<any> {
     return this.invokeContract(oracleContractId, 'submit_reading', [
       nativeToScVal(projectId, { type: 'string' }),
       nativeToScVal(reading.value, { type: 'i128' }), // Simplified
@@ -177,7 +188,12 @@ export class StellarService {
     return this.callReadOnly(governanceId, 'get_config');
   }
 
-  async createProposal(governanceId: string, title: string, description: string, action: any): Promise<any> {
+  async createProposal(
+    governanceId: string,
+    title: string,
+    description: string,
+    action: any,
+  ): Promise<any> {
     return this.invokeContract(governanceId, 'propose', [
       nativeToScVal(title, { type: 'string' }),
       nativeToScVal(description, { type: 'string' }),
@@ -200,19 +216,27 @@ export class StellarService {
 
   // ── Events ──
 
-  async getEvents(filter: { startLedger?: number; contractIds?: string[]; topics?: string[][] }): Promise<any[]> {
+  async getEvents(filter: {
+    startLedger?: number;
+    contractIds?: string[];
+    topics?: string[][];
+  }): Promise<any[]> {
     // Uses stellarClient to query getEvents
     const response = await this.stellarClient.getServer().getEvents({
       startLedger: filter.startLedger,
-      filters: filter.contractIds?.map(id => ({
-        contractIds: [id],
-        topics: filter.topics,
-      })) || [],
+      filters:
+        filter.contractIds?.map((id) => ({
+          contractIds: [id],
+          topics: filter.topics,
+        })) || [],
     });
     return response.events;
   }
 
-  async streamEvents(filter: { contractIds: string[]; topics?: string[][] }, callback: (event: any) => void): Promise<void> {
+  async streamEvents(
+    filter: { contractIds: string[]; topics?: string[][] },
+    _callback: (event: any) => void,
+  ): Promise<void> {
     this.logger.log(`Streaming events for contracts: ${filter.contractIds.join(', ')}`);
     // In a real app, this would be a long-running process or a subscription
     // For now, we'll just log it

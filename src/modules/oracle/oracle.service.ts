@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
@@ -45,13 +40,7 @@ export class OracleService {
     failed: number;
     lastSubmission: OracleSubmission | null;
   }> {
-    const [
-      totalSubmissions,
-      pending,
-      confirmed,
-      failed,
-      lastSubmission,
-    ] = await Promise.all([
+    const [totalSubmissions, pending, confirmed, failed, lastSubmission] = await Promise.all([
       this.submissionRepo.count(),
       this.submissionRepo.count({ where: { status: SubmissionStatus.PENDING } }),
       this.submissionRepo.count({ where: { status: SubmissionStatus.CONFIRMED } }),
@@ -71,7 +60,9 @@ export class OracleService {
       qb.andWhere('submission.project_id = :projectId', { projectId: query.projectId });
     }
     if (query.oracleAddress) {
-      qb.andWhere('submission.oracle_address = :oracleAddress', { oracleAddress: query.oracleAddress });
+      qb.andWhere('submission.oracle_address = :oracleAddress', {
+        oracleAddress: query.oracleAddress,
+      });
     }
     if (query.status) {
       qb.andWhere('submission.status = :status', { status: query.status });
@@ -150,9 +141,7 @@ export class OracleService {
       where: {
         projectId,
         status: SubmissionStatus.CONFIRMED,
-        ...(startTime && endTime
-          ? { createdAt: Between(startTime, endTime) as any }
-          : {}),
+        ...(startTime && endTime ? { createdAt: Between(startTime, endTime) as any } : {}),
       },
     });
 
@@ -170,13 +159,27 @@ export class OracleService {
 
     for (const sub of submissions) {
       const snap = sub.readingsSnapshot as Record<string, number | undefined>;
-      if (snap.ph != null) phValues.push(snap.ph);
-      if (snap.turbidity != null) turbidityValues.push(snap.turbidity);
-      if (snap.dissolvedOxygen != null) doValues.push(snap.dissolvedOxygen);
-      if (snap.flowRate != null) flowValues.push(snap.flowRate);
-      if (snap.nitrogen != null) nValues.push(snap.nitrogen);
-      if (snap.phosphorus != null) pValues.push(snap.phosphorus);
-      if (snap.temperature != null) tempValues.push(snap.temperature);
+      if (snap.ph != null) {
+        phValues.push(snap.ph);
+      }
+      if (snap.turbidity != null) {
+        turbidityValues.push(snap.turbidity);
+      }
+      if (snap.dissolvedOxygen != null) {
+        doValues.push(snap.dissolvedOxygen);
+      }
+      if (snap.flowRate != null) {
+        flowValues.push(snap.flowRate);
+      }
+      if (snap.nitrogen != null) {
+        nValues.push(snap.nitrogen);
+      }
+      if (snap.phosphorus != null) {
+        pValues.push(snap.phosphorus);
+      }
+      if (snap.temperature != null) {
+        tempValues.push(snap.temperature);
+      }
     }
 
     return {
@@ -194,12 +197,12 @@ export class OracleService {
   }
 
   private median(values: number[]): number | null {
-    if (values.length === 0) return null;
+    if (values.length === 0) {
+      return null;
+    }
     const sorted = [...values].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 !== 0
-      ? sorted[mid]
-      : (sorted[mid - 1] + sorted[mid]) / 2;
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
   private async getNextNonce(oracleAddress: string): Promise<number> {

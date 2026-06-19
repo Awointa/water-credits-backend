@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
@@ -18,7 +14,9 @@ export class UsersService {
 
   async findById(id: string): Promise<User> {
     const user = await this.userRepo.findOne({ where: { id } });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
     return user;
   }
 
@@ -38,13 +36,14 @@ export class UsersService {
     return { data, total, page, limit };
   }
 
-  async updateProfile(
-    userId: string,
-    dto: UpdateUserDto,
-  ): Promise<User> {
+  async updateProfile(userId: string, dto: UpdateUserDto): Promise<User> {
     const user = await this.findById(userId);
-    if (dto.email !== undefined) user.email = dto.email;
-    if (dto.displayName !== undefined) user.displayName = dto.displayName;
+    if (dto.email !== undefined) {
+      user.email = dto.email;
+    }
+    if (dto.displayName !== undefined) {
+      user.displayName = dto.displayName;
+    }
     if (dto.isKycVerified !== undefined) {
       if (user.role === UserRole.ADMIN) {
         user.isKycVerified = dto.isKycVerified;
@@ -55,10 +54,7 @@ export class UsersService {
     return this.userRepo.save(user);
   }
 
-  async updateRole(
-    targetUserId: string,
-    dto: UpdateRoleDto,
-  ): Promise<User> {
+  async updateRole(targetUserId: string, dto: UpdateRoleDto): Promise<User> {
     const user = await this.findById(targetUserId);
     user.role = dto.role;
     return this.userRepo.save(user);
@@ -66,7 +62,9 @@ export class UsersService {
 
   async softDelete(userId: string): Promise<void> {
     const result = await this.userRepo.update(userId, { isActive: false });
-    if (result.affected === 0) throw new NotFoundException('User not found');
+    if (result.affected === 0) {
+      throw new NotFoundException('User not found');
+    }
   }
 
   async restore(userId: string): Promise<User> {
@@ -74,7 +72,9 @@ export class UsersService {
       where: { id: userId },
       withDeleted: false,
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
     user.isActive = true;
     return this.userRepo.save(user);
   }

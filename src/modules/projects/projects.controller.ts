@@ -6,7 +6,6 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -17,7 +16,7 @@ import { QueryProjectsDto } from './dto/query-projects.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { User, UserRole } from '../users/entities/user.entity';
+import { UserRole } from '../users/entities/user.entity';
 import { Project } from './entities/project.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 
@@ -27,18 +26,13 @@ export class ProjectsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(
-    @CurrentUser('id') userId: string,
-    @Body() dto: CreateProjectDto,
-  ): Promise<Project> {
+  async create(@CurrentUser('id') userId: string, @Body() dto: CreateProjectDto): Promise<Project> {
     return this.projectsService.create(userId, dto);
   }
 
   @Get()
   @Public()
-  async findAll(
-    @Query() query: QueryProjectsDto,
-  ): Promise<PaginatedResponseDto<Project>> {
+  async findAll(@Query() query: QueryProjectsDto): Promise<PaginatedResponseDto<Project>> {
     const { data, total, page, limit } = await this.projectsService.findAll(query);
     return PaginatedResponseDto.from(data, total, page, limit);
   }
@@ -62,10 +56,7 @@ export class ProjectsController {
   @Patch(':id/status')
   @Roles(UserRole.ADMIN, UserRole.VERIFIER)
   @HttpCode(HttpStatus.OK)
-  async updateStatus(
-    @Param('id') id: string,
-    @Body('status') status: string,
-  ): Promise<Project> {
+  async updateStatus(@Param('id') id: string, @Body('status') status: string): Promise<Project> {
     return this.projectsService.updateStatus(id, status as any);
   }
 

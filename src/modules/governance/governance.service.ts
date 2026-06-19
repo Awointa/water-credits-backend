@@ -74,7 +74,9 @@ export class GovernanceService {
 
   async getProposalById(id: string): Promise<Proposal> {
     const proposal = await this.proposalRepo.findOne({ where: { id } });
-    if (!proposal) throw new NotFoundException('Proposal not found');
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
     await this.checkExpiry(proposal);
     return proposal;
   }
@@ -119,9 +121,8 @@ export class GovernanceService {
     const totalVotes = proposal.votesFor + proposal.votesAgainst;
 
     if (totalVotes >= config.quorum) {
-      proposal.status = proposal.votesFor > proposal.votesAgainst
-        ? ProposalStatus.PASSED
-        : ProposalStatus.REJECTED;
+      proposal.status =
+        proposal.votesFor > proposal.votesAgainst ? ProposalStatus.PASSED : ProposalStatus.REJECTED;
     }
 
     const saved = await this.proposalRepo.save(proposal);
@@ -155,7 +156,9 @@ export class GovernanceService {
   }
 
   private async checkExpiry(proposal: Proposal): Promise<void> {
-    if (proposal.status !== ProposalStatus.ACTIVE) return;
+    if (proposal.status !== ProposalStatus.ACTIVE) {
+      return;
+    }
     if (new Date() > new Date(proposal.deadline)) {
       proposal.status = ProposalStatus.EXPIRED;
       await this.proposalRepo.save(proposal);

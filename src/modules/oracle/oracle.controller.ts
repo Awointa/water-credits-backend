@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Query,
-  Param,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Param, HttpCode, HttpStatus } from '@nestjs/common';
 import { OracleService, AggregatedReading } from './oracle.service';
 import { OracleQueryDto } from './dto/oracle-query.dto';
 import { TriggerSubmissionDto } from './dto/trigger-submission.dto';

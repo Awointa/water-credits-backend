@@ -67,16 +67,12 @@ export class SensorsController {
 
   @Post('devices')
   @HttpCode(HttpStatus.CREATED)
-  async registerDevice(
-    @Body() dto: RegisterDeviceDto,
-  ): Promise<SensorDevice> {
+  async registerDevice(@Body() dto: RegisterDeviceDto): Promise<SensorDevice> {
     return this.sensorsService.registerDevice(dto.projectId, dto);
   }
 
   @Get('devices')
-  async getDevices(
-    @Query('projectId') projectId?: string,
-  ): Promise<SensorDevice[]> {
+  async getDevices(@Query('projectId') projectId?: string): Promise<SensorDevice[]> {
     return this.sensorsService.getDevices(projectId);
   }
 

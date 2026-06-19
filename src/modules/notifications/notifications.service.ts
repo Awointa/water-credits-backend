@@ -53,17 +53,11 @@ export class NotificationsService {
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    return this.notificationRepository.update(
-      { id: notificationId, userId },
-      { isRead: true },
-    );
+    return this.notificationRepository.update({ id: notificationId, userId }, { isRead: true });
   }
 
   async markAllAsRead(userId: string) {
-    return this.notificationRepository.update(
-      { userId, isRead: false },
-      { isRead: true },
-    );
+    return this.notificationRepository.update({ userId, isRead: false }, { isRead: true });
   }
 
   // Broadcasters for specific events as requested in Day 9

@@ -6,8 +6,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({
   namespace: 'notifications',

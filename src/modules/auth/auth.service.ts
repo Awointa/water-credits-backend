@@ -37,7 +37,9 @@ export class AuthService {
   ): Promise<User | null> {
     const key = wallet.toLowerCase();
     const stored = this.challenges.get(key);
-    if (!stored || stored.challenge !== challenge) return null;
+    if (!stored || stored.challenge !== challenge) {
+      return null;
+    }
     if (stored.expiresAt < new Date()) {
       this.challenges.delete(key);
       return null;
@@ -45,11 +47,10 @@ export class AuthService {
 
     try {
       const keypair = Keypair.fromPublicKey(wallet);
-      const valid = keypair.verify(
-        Buffer.from(challenge),
-        Buffer.from(signature, 'hex'),
-      );
-      if (!valid) return null;
+      const valid = keypair.verify(Buffer.from(challenge), Buffer.from(signature, 'hex'));
+      if (!valid) {
+        return null;
+      }
       this.challenges.delete(key);
 
       const user = await this.userRepo.findOne({ where: { wallet, isActive: true } });
@@ -65,15 +66,19 @@ export class AuthService {
     challenge: string,
   ): Promise<{ accessToken: string; refreshToken: string; user: Partial<User> }> {
     const user = await this.validateStellarSignature(wallet, signature, challenge);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-    if (!user.isActive) throw new UnauthorizedException('Account is deactivated');
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
 
     const tokens = await this.generateTokens(user);
     user.refreshToken = tokens.refreshToken;
     await this.userRepo.save(user);
 
-    const { refreshToken: _, ...userData } = user;
+    const userData = { ...user };
     return { ...tokens, user: userData };
   }
 
@@ -96,18 +101,19 @@ export class AuthService {
 
     try {
       const keypair = Keypair.fromPublicKey(wallet);
-      const valid = keypair.verify(
-        Buffer.from(challenge),
-        Buffer.from(signature, 'hex'),
-      );
-      if (!valid) throw new UnauthorizedException('Invalid signature');
+      const valid = keypair.verify(Buffer.from(challenge), Buffer.from(signature, 'hex'));
+      if (!valid) {
+        throw new UnauthorizedException('Invalid signature');
+      }
     } catch {
       throw new UnauthorizedException('Invalid signature');
     }
     this.challenges.delete(key);
 
     const existing = await this.userRepo.findOne({ where: { wallet } });
-    if (existing) throw new ConflictException('Wallet already registered');
+    if (existing) {
+      throw new ConflictException('Wallet already registered');
+    }
 
     const user = this.userRepo.create({
       wallet,
@@ -121,13 +127,11 @@ export class AuthService {
     user.refreshToken = tokens.refreshToken;
     await this.userRepo.save(user);
 
-    const { refreshToken: _, ...userData } = user;
+    const userData = { ...user };
     return { ...tokens, user: userData };
   }
 
-  async refresh(
-    refreshToken: string,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       const secret = this.configService.get<string>('jwt.secret');
       const payload = this.jwtService.verify(refreshToken, { secret });
@@ -150,9 +154,7 @@ export class AuthService {
     await this.userRepo.update(userId, { refreshToken: null });
   }
 
-  private async generateTokens(
-    user: User,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
     const payload = { sub: user.id, wallet: user.wallet, role: user.role };
     const expiresIn = this.configService.get<string>('jwt.expiration') || '7d';
     const secret = this.configService.get<string>('jwt.secret');

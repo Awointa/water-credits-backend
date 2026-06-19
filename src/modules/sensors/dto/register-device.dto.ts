@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsObject,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsString, IsOptional, IsObject, IsUUID, MaxLength } from 'class-validator';
 
 export class RegisterDeviceDto {
   @IsUUID()

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Project, ProjectStatus } from '../projects/entities/project.entity';
 import { Retirement } from '../credits/entities/retirement.entity';
 import { ReadingBatch, BatchStatus } from '../sensors/entities/reading-batch.entity';
@@ -68,8 +68,8 @@ export class AnalyticsService {
       .getRawMany();
 
     return {
-      minted: minted.map(m => ({ month: m.month, amount: parseFloat(m.amount) })),
-      retired: retired.map(r => ({ month: r.month, amount: parseFloat(r.amount) })),
+      minted: minted.map((m) => ({ month: m.month, amount: parseFloat(m.amount) })),
+      retired: retired.map((r) => ({ month: r.month, amount: parseFloat(r.amount) })),
     };
   }
 
@@ -89,8 +89,11 @@ export class AnalyticsService {
       .getRawMany();
 
     return {
-      byStatus: byStatus.map(s => ({ status: s.status, count: parseInt(s.count) })),
-      byMethodology: byMethodology.map(m => ({ methodology: m.methodology, count: parseInt(m.count) })),
+      byStatus: byStatus.map((s) => ({ status: s.status, count: parseInt(s.count) })),
+      byMethodology: byMethodology.map((m) => ({
+        methodology: m.methodology,
+        count: parseInt(m.count),
+      })),
     };
   }
 
@@ -102,7 +105,7 @@ export class AnalyticsService {
       .groupBy('retirement.purpose')
       .getRawMany();
 
-    return result.map(r => ({
+    return result.map((r) => ({
       purpose: r.purpose,
       amount: parseFloat(r.amount),
     }));
@@ -122,7 +125,7 @@ export class AnalyticsService {
       .limit(limit)
       .getRawMany();
 
-    return result.map(r => ({
+    return result.map((r) => ({
       id: r.id,
       name: r.name,
       totalGenerated: parseFloat(r.totalGenerated),
@@ -142,7 +145,7 @@ export class AnalyticsService {
       .limit(limit)
       .getRawMany();
 
-    return result.map(r => ({
+    return result.map((r) => ({
       id: r.id,
       name: r.name,
       totalRetired: parseFloat(r.totalRetired),

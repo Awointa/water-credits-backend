@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CreditsService } from './credits.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Retirement } from './entities/retirement.entity';
-import { Project } from '../projects/entities/project.entity';
 import { getQueueToken } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 

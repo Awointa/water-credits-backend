@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Patch,
-  Param,
-  Body,
-  Query,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -38,9 +28,7 @@ export class UsersController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  async findAll(
-    @Query() pagination: PaginationDto,
-  ): Promise<PaginatedResponseDto<User>> {
+  async findAll(@Query() pagination: PaginationDto): Promise<PaginatedResponseDto<User>> {
     const { data, total, page, limit } = await this.usersService.findAll(
       pagination.page,
       pagination.limit,
@@ -51,10 +39,7 @@ export class UsersController {
   @Patch(':id/role')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  async updateRole(
-    @Param('id') id: string,
-    @Body() dto: UpdateRoleDto,
-  ): Promise<User> {
+  async updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto): Promise<User> {
     return this.usersService.updateRole(id, dto);
   }
 

@@ -1,9 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
 
 @Entity('governance_config')
 export class GovernanceConfig {

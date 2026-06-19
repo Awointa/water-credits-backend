@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Keypair } from '@stellar/stellar-sdk';
@@ -36,7 +32,15 @@ function buildReadingPayload(
   params: Record<string, number | undefined | null>,
 ): string {
   const parts = [deviceId, timestamp];
-  for (const key of ['ph', 'turbidity', 'dissolvedOxygen', 'flowRate', 'nitrogen', 'phosphorus', 'temperature']) {
+  for (const key of [
+    'ph',
+    'turbidity',
+    'dissolvedOxygen',
+    'flowRate',
+    'nitrogen',
+    'phosphorus',
+    'temperature',
+  ]) {
     const val = params[key];
     parts.push(val != null ? val.toString() : '');
   }
@@ -80,13 +84,17 @@ export class SensorsService {
 
   async getDeviceById(deviceId: string): Promise<SensorDevice> {
     const device = await this.deviceRepo.findOne({ where: { id: deviceId } });
-    if (!device) throw new NotFoundException('Sensor device not found');
+    if (!device) {
+      throw new NotFoundException('Sensor device not found');
+    }
     return device;
   }
 
   async getDeviceByDeviceId(deviceId: string): Promise<SensorDevice> {
     const device = await this.deviceRepo.findOne({ where: { deviceId } });
-    if (!device) throw new NotFoundException('Sensor device not found');
+    if (!device) {
+      throw new NotFoundException('Sensor device not found');
+    }
     return device;
   }
 
@@ -140,9 +148,13 @@ export class SensorsService {
 
   private validateParameters(params: Record<string, number | undefined | null>): void {
     for (const [key, value] of Object.entries(params)) {
-      if (value == null) continue;
+      if (value == null) {
+        continue;
+      }
       const range = PARAMETER_RANGES[key];
-      if (!range) continue;
+      if (!range) {
+        continue;
+      }
       if (value < range.min || value > range.max) {
         throw new BadRequestException(
           `Parameter '${key}' value ${value} is out of range [${range.min}, ${range.max}]`,
@@ -167,7 +179,9 @@ export class SensorsService {
       order: { createdAt: 'DESC' },
     });
 
-    if (pending && pending.createdAt >= cutoff) return pending;
+    if (pending && pending.createdAt >= cutoff) {
+      return pending;
+    }
 
     const batch = this.batchRepo.create({
       projectId,
@@ -212,7 +226,9 @@ export class SensorsService {
         where: { deviceId: device.id },
         order: { timestamp: 'DESC' },
       });
-      if (!reading) throw new NotFoundException('No readings found for this device');
+      if (!reading) {
+        throw new NotFoundException('No readings found for this device');
+      }
       return reading;
     }
 
@@ -223,7 +239,9 @@ export class SensorsService {
         where: { deviceId: device.id },
         order: { timestamp: 'DESC' },
       });
-      if (reading) readings.push(reading);
+      if (reading) {
+        readings.push(reading);
+      }
     }
     return readings;
   }
@@ -233,7 +251,8 @@ export class SensorsService {
     startDate?: string,
     endDate?: string,
   ): Promise<Record<string, number | null>> {
-    const qb = this.readingRepo.createQueryBuilder('reading')
+    const qb = this.readingRepo
+      .createQueryBuilder('reading')
       .select('AVG(reading.ph)', 'avgPh')
       .addSelect('AVG(reading.turbidity)', 'avgTurbidity')
       .addSelect('AVG(reading.dissolved_oxygen)', 'avgDissolvedOxygen')

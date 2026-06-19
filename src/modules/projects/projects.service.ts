@@ -45,7 +45,9 @@ export class ProjectsService {
 
   async findById(id: string): Promise<Project> {
     const project = await this.projectRepo.findOne({ where: { id } });
-    if (!project) throw new NotFoundException('Project not found');
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
     return project;
   }
 
@@ -59,21 +61,37 @@ export class ProjectsService {
     if (dto.status !== undefined && dto.status !== project.status) {
       const allowed = VALID_TRANSITIONS[project.status];
       if (!allowed.includes(dto.status)) {
-        throw new BadRequestException(
-          `Cannot transition from ${project.status} to ${dto.status}`,
-        );
+        throw new BadRequestException(`Cannot transition from ${project.status} to ${dto.status}`);
       }
     }
 
-    if (dto.name !== undefined) project.name = dto.name;
-    if (dto.description !== undefined) project.description = dto.description;
-    if (dto.latitude !== undefined) project.latitude = dto.latitude;
-    if (dto.longitude !== undefined) project.longitude = dto.longitude;
-    if (dto.methodology !== undefined) project.methodology = dto.methodology;
-    if (dto.areaHectares !== undefined) project.areaHectares = dto.areaHectares;
-    if (dto.baselineStartDate !== undefined) project.baselineStartDate = new Date(dto.baselineStartDate);
-    if (dto.baselineEndDate !== undefined) project.baselineEndDate = new Date(dto.baselineEndDate);
-    if (dto.status !== undefined) project.status = dto.status;
+    if (dto.name !== undefined) {
+      project.name = dto.name;
+    }
+    if (dto.description !== undefined) {
+      project.description = dto.description;
+    }
+    if (dto.latitude !== undefined) {
+      project.latitude = dto.latitude;
+    }
+    if (dto.longitude !== undefined) {
+      project.longitude = dto.longitude;
+    }
+    if (dto.methodology !== undefined) {
+      project.methodology = dto.methodology;
+    }
+    if (dto.areaHectares !== undefined) {
+      project.areaHectares = dto.areaHectares;
+    }
+    if (dto.baselineStartDate !== undefined) {
+      project.baselineStartDate = new Date(dto.baselineStartDate);
+    }
+    if (dto.baselineEndDate !== undefined) {
+      project.baselineEndDate = new Date(dto.baselineEndDate);
+    }
+    if (dto.status !== undefined) {
+      project.status = dto.status;
+    }
 
     return this.projectRepo.save(project);
   }
@@ -103,8 +121,10 @@ export class ProjectsService {
       const search = `%${query.search}%`;
       qb.andWhere(
         new Brackets((qb) => {
-          qb.where('project.name ILIKE :search', { search })
-            .orWhere('project.description ILIKE :search', { search });
+          qb.where('project.name ILIKE :search', { search }).orWhere(
+            'project.description ILIKE :search',
+            { search },
+          );
         }),
       );
     }
@@ -137,12 +157,16 @@ export class ProjectsService {
     sortOrder?: SortOrder,
   ): void {
     const allowedSortColumns = [
-      'name', 'status', 'methodology', 'area_hectares',
-      'created_at', 'updated_at', 'latitude', 'longitude',
+      'name',
+      'status',
+      'methodology',
+      'area_hectares',
+      'created_at',
+      'updated_at',
+      'latitude',
+      'longitude',
     ];
-    const column = sortBy && allowedSortColumns.includes(sortBy)
-      ? sortBy
-      : 'created_at';
+    const column = sortBy && allowedSortColumns.includes(sortBy) ? sortBy : 'created_at';
     const order = sortOrder === SortOrder.ASC ? 'ASC' : 'DESC';
     qb.orderBy(`project.${column}`, order);
   }

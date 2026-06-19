@@ -9,9 +9,9 @@ export class SensorsIngestionProcessor {
   @Process({
     concurrency: 5,
   })
-  async processReading(job: Job<{ deviceId: string; projectId: string; readingId: string }>): Promise<void> {
-    this.logger.debug(
-      `Processing reading ${job.data.readingId} from device ${job.data.deviceId}`,
-    );
+  async processReading(
+    job: Job<{ deviceId: string; projectId: string; readingId: string }>,
+  ): Promise<void> {
+    this.logger.debug(`Processing reading ${job.data.readingId} from device ${job.data.deviceId}`);
   }
 }

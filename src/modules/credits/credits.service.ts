@@ -1,16 +1,10 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Retirement } from './entities/retirement.entity';
-import { Project } from '../projects/entities/project.entity';
 import { RetireCreditsDto } from './dto/retire-credits.dto';
 import { CreditQueryDto } from './dto/credit-query.dto';
 
@@ -42,12 +36,15 @@ export class CreditsService {
       order: { retiredAt: 'DESC' },
     });
 
-    const projectMap = new Map<string, {
-      projectId: string;
-      projectName: string;
-      retired: number;
-      certificateCount: number;
-    }>();
+    const projectMap = new Map<
+      string,
+      {
+        projectId: string;
+        projectName: string;
+        retired: number;
+        certificateCount: number;
+      }
+    >();
 
     let totalRetired = 0;
 
@@ -112,7 +109,8 @@ export class CreditsService {
     userId: string,
     query: CreditQueryDto,
   ): Promise<{ data: Retirement[]; total: number; page: number; limit: number }> {
-    const qb = this.retirementRepo.createQueryBuilder('retirement')
+    const qb = this.retirementRepo
+      .createQueryBuilder('retirement')
       .leftJoinAndSelect('retirement.project', 'project')
       .where('retirement.user_id = :userId', { userId });
 

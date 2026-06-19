@@ -1,20 +1,9 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  Body,
-  Query,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { CreditsService } from './credits.service';
 import { RetireCreditsDto } from './dto/retire-credits.dto';
 import { CreditQueryDto } from './dto/credit-query.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { UserRole } from '../users/entities/user.entity';
 import { Retirement } from './entities/retirement.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 

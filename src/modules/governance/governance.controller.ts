@@ -40,9 +40,7 @@ export class GovernanceController {
 
   @Get('proposals')
   @Public()
-  async getProposals(
-    @Query() query: GovernanceQueryDto,
-  ): Promise<PaginatedResponseDto<Proposal>> {
+  async getProposals(@Query() query: GovernanceQueryDto): Promise<PaginatedResponseDto<Proposal>> {
     const { data, total, page, limit } = await this.governanceService.getProposals(query);
     return PaginatedResponseDto.from(data, total, page, limit);
   }

@@ -31,7 +31,10 @@ describe('AuthService', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
-              const config = { 'jwt.secret': 'test-secret', 'jwt.expiresIn': '7d' };
+              const config: Record<string, string> = {
+                'jwt.secret': 'test-secret',
+                'jwt.expiresIn': '7d',
+              };
               return config[key];
             }),
           },

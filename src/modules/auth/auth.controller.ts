@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ChallengeRequestDto, ChallengeResponseDto } from './dto/challenge.dto';
 import { LoginDto } from './dto/login.dto';
@@ -14,7 +7,6 @@ import { RefreshDto } from './dto/refresh.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { User } from '../users/entities/user.entity';
 import { RateLimitGuard, RateLimit } from './guards/rate-limit.guard';
 
 @Controller('auth')

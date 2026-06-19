@@ -1,14 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  IsEnum,
-  Min,
-  Max,
-  IsDateString,
-  MaxLength,
-} from 'class-validator';
-import { ProjectStatus } from '../entities/project.entity';
+import { IsString, IsOptional, IsNumber, Min, Max, IsDateString, MaxLength } from 'class-validator';
 
 export class CreateProjectDto {
   @IsString()
