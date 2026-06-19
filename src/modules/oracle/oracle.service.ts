@@ -159,25 +159,25 @@ export class OracleService {
 
     for (const sub of submissions) {
       const snap = sub.readingsSnapshot as Record<string, number | undefined>;
-      if (snap.ph != null) {
+      if (snap.ph !== undefined) {
         phValues.push(snap.ph);
       }
-      if (snap.turbidity != null) {
+      if (snap.turbidity !== undefined) {
         turbidityValues.push(snap.turbidity);
       }
-      if (snap.dissolvedOxygen != null) {
+      if (snap.dissolvedOxygen !== undefined) {
         doValues.push(snap.dissolvedOxygen);
       }
-      if (snap.flowRate != null) {
+      if (snap.flowRate !== undefined) {
         flowValues.push(snap.flowRate);
       }
-      if (snap.nitrogen != null) {
+      if (snap.nitrogen !== undefined) {
         nValues.push(snap.nitrogen);
       }
-      if (snap.phosphorus != null) {
+      if (snap.phosphorus !== undefined) {
         pValues.push(snap.phosphorus);
       }
-      if (snap.temperature != null) {
+      if (snap.temperature !== undefined) {
         tempValues.push(snap.temperature);
       }
     }

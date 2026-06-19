@@ -42,7 +42,7 @@ function buildReadingPayload(
     'temperature',
   ]) {
     const val = params[key];
-    parts.push(val != null ? val.toString() : '');
+    parts.push(val?.toString() ?? '');
   }
   return parts.join('|');
 }
@@ -148,7 +148,7 @@ export class SensorsService {
 
   private validateParameters(params: Record<string, number | undefined | null>): void {
     for (const [key, value] of Object.entries(params)) {
-      if (value == null) {
+      if (value === null || value === undefined) {
         continue;
       }
       const range = PARAMETER_RANGES[key];
