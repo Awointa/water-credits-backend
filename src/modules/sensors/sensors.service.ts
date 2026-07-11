@@ -8,6 +8,7 @@ import { ReadingBatch, BatchStatus } from './entities/reading-batch.entity';
 import { CreateReadingDto } from './dto/create-reading.dto';
 import { QueryReadingsDto } from './dto/query-readings.dto';
 import { RegisterDeviceDto } from './dto/register-device.dto';
+import { generateDeviceApiKey } from '../../common/utils/api-key.util';
 
 interface ParameterRange {
   min: number;
@@ -58,10 +59,21 @@ export class SensorsService {
     private readonly batchRepo: Repository<ReadingBatch>,
   ) {}
 
-  async registerDevice(projectId: string, dto: RegisterDeviceDto): Promise<SensorDevice> {
+  async registerDevice(
+    projectId: string,
+    dto: RegisterDeviceDto,
+  ): Promise<SensorDevice & { apiKeyPlaintext: string }> {
     const existing = await this.deviceRepo.findOne({ where: { deviceId: dto.deviceId } });
     if (existing) {
       throw new BadRequestException('Device with this deviceId already registered');
+    }
+
+    const { plaintext, hash } = await generateDeviceApiKey(dto.deviceId);
+
+    // Build parameter map from enum array
+    const paramMap: Record<string, boolean> = {};
+    for (const p of dto.parameters) {
+      paramMap[p] = true;
     }
 
     const device = this.deviceRepo.create({
@@ -70,9 +82,14 @@ export class SensorsService {
       manufacturer: dto.manufacturer,
       model: dto.model,
       publicKey: dto.publicKey,
-      parameters: dto.parameters ?? null,
+      parameters: { ...paramMap, ...(dto.metadata ?? {}) },
+      apiKeyHash: hash,
+      isActive: true,
     });
-    return this.deviceRepo.save(device);
+    const saved = await this.deviceRepo.save(device);
+
+    // Return the plaintext key once — it is never retrievable again
+    return Object.assign(saved, { apiKeyPlaintext: plaintext });
   }
 
   async getDevices(projectId?: string): Promise<SensorDevice[]> {

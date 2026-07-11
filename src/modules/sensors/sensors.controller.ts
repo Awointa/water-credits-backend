@@ -67,7 +67,7 @@ export class SensorsController {
 
   @Post('devices')
   @HttpCode(HttpStatus.CREATED)
-  async registerDevice(@Body() dto: RegisterDeviceDto): Promise<SensorDevice> {
+  async registerDevice(@Body() dto: RegisterDeviceDto): Promise<SensorDevice & { apiKeyPlaintext: string }> {
     return this.sensorsService.registerDevice(dto.projectId, dto);
   }
 
