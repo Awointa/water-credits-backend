@@ -38,6 +38,16 @@ export class SensorDevice {
   @Column({ name: 'public_key', type: 'text' })
   publicKey: string;
 
+  /**
+   * bcrypt hash of the device's pre-shared API key secret.
+   * The plaintext is only returned once at registration time.
+   */
+  @Column({ name: 'api_key_hash', type: 'text', nullable: true, select: false })
+  apiKeyHash: string | null;
+
+  @Column({ name: 'is_active', default: true })
+  isActive: boolean;
+
   @Column({ name: 'last_reading_at', type: 'timestamptz', nullable: true })
   lastReadingAt: Date | null;
 
