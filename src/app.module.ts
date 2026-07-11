@@ -13,6 +13,7 @@ import { GovernanceModule } from './modules/governance/governance.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StellarModule } from './modules/stellar/stellar.module';
+import { HealthModule } from './modules/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import appConfig from './config/app.config';
@@ -61,6 +62,7 @@ import oracleConfig from './config/oracle.config';
     AnalyticsModule,
     NotificationsModule,
     StellarModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
