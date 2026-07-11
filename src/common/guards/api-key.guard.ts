@@ -47,7 +47,7 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request & { sensorDevice?: SensorDevice }>();
-    const rawKey: string | undefined = (request.headers as Record<string, string>)['x-api-key'];
+    const rawKey = (request.headers as unknown as Record<string, string>)['x-api-key'];
 
     if (!rawKey) {
       throw new UnauthorizedException('Missing X-API-Key header');

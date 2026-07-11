@@ -150,7 +150,11 @@ export class StellarService {
 
   // ── Factory / Project Registry ──
 
-  async registerProject(factoryId: string, owner: string, metadata: Record<string, unknown>): Promise<unknown> {
+  async registerProject(
+    factoryId: string,
+    owner: string,
+    metadata: Record<string, unknown>,
+  ): Promise<unknown> {
     return this.invokeContract(factoryId, 'register', [
       new Address(owner).toScVal(),
       nativeToScVal(JSON.stringify(metadata), { type: 'string' }),
@@ -158,7 +162,9 @@ export class StellarService {
   }
 
   async getProjectContract(factoryId: string, projectId: string): Promise<string> {
-    return this.callReadOnly(factoryId, 'get', [nativeToScVal(projectId, { type: 'string' })]);
+    return this.callReadOnly(factoryId, 'get', [
+      nativeToScVal(projectId, { type: 'string' }),
+    ]) as Promise<string>;
   }
 
   // ── Oracle ──

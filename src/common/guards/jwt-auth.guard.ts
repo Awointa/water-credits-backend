@@ -20,7 +20,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: Error | null, user: Express.User | false) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handleRequest(err: any, user: any) {
     if (err || !user) {
       throw err || new UnauthorizedException('Invalid or missing token');
     }
