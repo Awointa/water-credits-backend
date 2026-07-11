@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProjectsModule } from './modules/projects/projects.module';
@@ -52,6 +53,18 @@ import oracleConfig from './config/oracle.config';
       }),
       inject: [ConfigService],
     }),
+    // Default rate limit: 60 req / 60 s for authenticated routes.
+    // Override per-route with @ThrottlePublic(), @ThrottleSensor(), etc.
+    ThrottlerModule.forRootAsync({
+      useFactory: (configService: ConfigService) => [
+        {
+          name: 'default',
+          ttl: configService.get<number>('THROTTLE_TTL', 60000),
+          limit: configService.get<number>('THROTTLE_LIMIT', 60),
+        },
+      ],
+      inject: [ConfigService],
+    }),
     AuthModule,
     UsersModule,
     ProjectsModule,
@@ -65,6 +78,7 @@ import oracleConfig from './config/oracle.config';
     HealthModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

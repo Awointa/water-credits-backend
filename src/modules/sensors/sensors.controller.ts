@@ -19,6 +19,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { SensorReading } from './entities/sensor-reading.entity';
 import { SensorDevice } from './entities/sensor-device.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
+import { ThrottleSensor } from '../../common/decorators/throttle.decorator';
 
 @Controller('sensors')
 export class SensorsController {
@@ -29,6 +30,7 @@ export class SensorsController {
 
   @Post('readings')
   @Public()
+  @ThrottleSensor()
   @HttpCode(HttpStatus.CREATED)
   async ingestReading(
     @Body() dto: CreateReadingDto,

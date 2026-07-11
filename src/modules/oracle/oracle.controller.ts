@@ -7,12 +7,14 @@ import { Public } from '../../common/decorators/public.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { OracleSubmission } from './entities/oracle-submission.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
+import { ThrottleOracle, ThrottleAdmin } from '../../common/decorators/throttle.decorator';
 
 @Controller('oracle')
 export class OracleController {
   constructor(private readonly oracleService: OracleService) {}
 
   @Get('status')
+  @ThrottleAdmin()
   @Roles(UserRole.ADMIN, UserRole.VERIFIER)
   async getStatus() {
     return this.oracleService.getStatus();
@@ -34,6 +36,7 @@ export class OracleController {
   }
 
   @Post('trigger')
+  @ThrottleOracle()
   @Roles(UserRole.ADMIN, UserRole.ORACLE)
   @HttpCode(HttpStatus.CREATED)
   async triggerSubmission(@Body() dto: TriggerSubmissionDto): Promise<OracleSubmission> {

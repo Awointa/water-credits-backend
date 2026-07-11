@@ -8,12 +8,14 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RateLimitGuard, RateLimit } from './guards/rate-limit.guard';
+import { ThrottlePublic, SkipThrottle } from '../../common/decorators/throttle.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @ThrottlePublic()
   @UseGuards(RateLimitGuard)
   @RateLimit(10, 60_000)
   @Post('challenge')
@@ -23,6 +25,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottlePublic()
   @UseGuards(RateLimitGuard)
   @RateLimit(60, 60_000)
   @Post('login')
@@ -32,6 +35,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottlePublic()
   @UseGuards(RateLimitGuard)
   @RateLimit(60, 60_000)
   @Post('register')
@@ -56,6 +60,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @SkipThrottle()
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@CurrentUser('id') userId: string): Promise<void> {
     return this.authService.logout(userId);
