@@ -17,7 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { UserRole } from '../users/entities/user.entity';
-import { Project } from './entities/project.entity';
+import { Project, ProjectStatus } from './entities/project.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 
 @Controller('projects')
@@ -57,7 +57,7 @@ export class ProjectsController {
   @Roles(UserRole.ADMIN, UserRole.VERIFIER)
   @HttpCode(HttpStatus.OK)
   async updateStatus(@Param('id') id: string, @Body('status') status: string): Promise<Project> {
-    return this.projectsService.updateStatus(id, status as any);
+    return this.projectsService.updateStatus(id, status as ProjectStatus);
   }
 
   @Get('count/by-owner')

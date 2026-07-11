@@ -19,7 +19,7 @@ export class NotificationsService {
     type: NotificationType,
     title: string,
     message: string,
-    metadata?: any,
+    metadata?: Record<string, unknown>,
   ): Promise<Notification> {
     const notification = this.notificationRepository.create({
       userId,
@@ -61,7 +61,7 @@ export class NotificationsService {
   }
 
   // Broadcasters for specific events as requested in Day 9
-  async notifySensorReading(userId: string, projectId: string, reading: any) {
+  async notifySensorReading(userId: string, projectId: string, reading: Record<string, unknown>) {
     return this.createNotification(
       userId,
       NotificationType.SENSOR_READING,

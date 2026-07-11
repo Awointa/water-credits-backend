@@ -47,7 +47,7 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request & { sensorDevice?: SensorDevice }>();
-    const rawKey: string | undefined = (request.headers as any)['x-api-key'];
+    const rawKey: string | undefined = (request.headers as Record<string, string>)['x-api-key'];
 
     if (!rawKey) {
       throw new UnauthorizedException('Missing X-API-Key header');
@@ -69,7 +69,7 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    const apiKeyHash: string | null = (device as any).apiKeyHash ?? null;
+    const apiKeyHash: string | null = (device as { apiKeyHash?: string }).apiKeyHash ?? null;
     if (!apiKeyHash) {
       this.logger.warn(`Device '${deviceId}' has no API key configured`);
       throw new UnauthorizedException('Device has no API key configured');

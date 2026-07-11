@@ -54,11 +54,11 @@ export class SensorsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     this.logger.log(`Client ${client.id} unsubscribed from project ${projectId}`);
   }
 
-  emitReading(projectId: string, reading: any): void {
+  emitReading(projectId: string, reading: Record<string, unknown>): void {
     this.server.to(`${PROJECT_PREFIX}${projectId}`).emit('sensor:reading', reading);
   }
 
-  emitAlert(projectId: string, alert: any): void {
+  emitAlert(projectId: string, alert: Record<string, unknown>): void {
     this.server.to(`${PROJECT_PREFIX}${projectId}`).emit('sensor:alert', alert);
   }
 }

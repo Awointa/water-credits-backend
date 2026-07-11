@@ -90,7 +90,7 @@ export class HealthService {
     try {
       // Bull queues use ioredis under the hood; a simple isReady check suffices
       const client = await this.sensorQueue.client;
-      await (client as any).ping();
+      await (client as { ping: () => Promise<void> }).ping();
       return { status: 'ok', latency_ms: Date.now() - start };
     } catch (err) {
       this.logger.warn(`Redis health check failed: ${(err as Error).message}`);
@@ -133,7 +133,7 @@ export class HealthService {
 
         const status: 'ok' | 'degraded' = failed > 10 ? 'degraded' : 'ok';
         results[name] = { status, waiting, active, failed };
-      } catch (err) {
+      } catch (_err) {
         results[name] = { status: 'down', waiting: -1, active: -1, failed: -1 };
       }
     }

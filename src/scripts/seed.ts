@@ -11,6 +11,7 @@
  * Environment variables required (same as the main app):
  *   DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD
  */
+/* eslint-disable no-console */
 
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
@@ -304,7 +305,7 @@ async function seed(): Promise<void> {
       chunks.push(readings.slice(i, i + 50));
     }
     for (const chunk of chunks) {
-      await readingRepo.save(readingRepo.create(chunk as any));
+      await readingRepo.save(chunk);
     }
     await batchRepo.update(batch!.id, { readingCount: readings.length });
     totalReadings += readings.length;

@@ -141,7 +141,7 @@ export class OracleService {
       where: {
         projectId,
         status: SubmissionStatus.CONFIRMED,
-        ...(startTime && endTime ? { createdAt: Between(startTime, endTime) as any } : {}),
+        ...(startTime && endTime ? { createdAt: Between(startTime, endTime) } : {}),
       },
     });
 

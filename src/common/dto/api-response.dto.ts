@@ -1,4 +1,4 @@
-export class ApiResponseDto<T = any> {
+export class ApiResponseDto<T = unknown> {
   success: boolean;
   data: T;
   timestamp: string;
@@ -14,7 +14,7 @@ export class ApiResponseDto<T = any> {
   }
 }
 
-export class PaginatedResponseDto<T = any> {
+export class PaginatedResponseDto<T = unknown> {
   success: boolean;
   data: T[];
   meta: {

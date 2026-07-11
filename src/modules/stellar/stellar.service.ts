@@ -38,7 +38,7 @@ export class StellarService {
       const keypair = Keypair.fromPublicKey(wallet);
       return keypair.verify(Buffer.from(challenge), Buffer.from(signature, 'base64'));
     } catch (error) {
-      this.logger.error(`Signature verification failed: ${error.message}`);
+      this.logger.error(`Signature verification failed: ${(error as Error).message}`);
       return false;
     }
   }
@@ -65,7 +65,7 @@ export class StellarService {
     contractId: string,
     method: string,
     args: xdr.ScVal[] = [],
-  ): Promise<any> {
+  ): Promise<unknown> {
     const contract = new Contract(contractId);
     const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), '0'), {
       fee: '100',
@@ -91,7 +91,7 @@ export class StellarService {
     contractId: string,
     method: string,
     args: xdr.ScVal[] = [],
-  ): Promise<any> {
+  ): Promise<unknown> {
     const keypair = this.stellarClient.getKeypair();
     const network = await this.getNetwork();
     const account = await this.buildAccount(keypair);
@@ -128,7 +128,7 @@ export class StellarService {
     return new BigNumber(result?.toString() || '0');
   }
 
-  async mintCredits(tokenId: string, to: string, amount: BigNumber): Promise<any> {
+  async mintCredits(tokenId: string, to: string, amount: BigNumber): Promise<unknown> {
     return this.invokeContract(tokenId, 'mint', [
       new Address(to).toScVal(),
       nativeToScVal(amount.toFixed(0), { type: 'i128' }),
@@ -140,7 +140,7 @@ export class StellarService {
     amount: BigNumber,
     purpose: string,
     metadataUri: string,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.invokeContract(tokenId, 'retire', [
       nativeToScVal(amount.toFixed(0), { type: 'i128' }),
       nativeToScVal(purpose, { type: 'string' }),
@@ -150,7 +150,7 @@ export class StellarService {
 
   // ── Factory / Project Registry ──
 
-  async registerProject(factoryId: string, owner: string, metadata: any): Promise<any> {
+  async registerProject(factoryId: string, owner: string, metadata: Record<string, unknown>): Promise<unknown> {
     return this.invokeContract(factoryId, 'register', [
       new Address(owner).toScVal(),
       nativeToScVal(JSON.stringify(metadata), { type: 'string' }),
@@ -166,9 +166,9 @@ export class StellarService {
   async submitReading(
     oracleContractId: string,
     projectId: string,
-    reading: any,
+    reading: { value: number },
     nonce: number,
-  ): Promise<any> {
+  ): Promise<unknown> {
     return this.invokeContract(oracleContractId, 'submit_reading', [
       nativeToScVal(projectId, { type: 'string' }),
       nativeToScVal(reading.value, { type: 'i128' }), // Simplified
@@ -176,7 +176,7 @@ export class StellarService {
     ]);
   }
 
-  async addOracle(oracleContractId: string, oracleAddress: string): Promise<any> {
+  async addOracle(oracleContractId: string, oracleAddress: string): Promise<unknown> {
     return this.invokeContract(oracleContractId, 'add_oracle', [
       new Address(oracleAddress).toScVal(),
     ]);
@@ -184,7 +184,7 @@ export class StellarService {
 
   // ── Governance ──
 
-  async getProtocolConfig(governanceId: string): Promise<any> {
+  async getProtocolConfig(governanceId: string): Promise<unknown> {
     return this.callReadOnly(governanceId, 'get_config');
   }
 
@@ -192,8 +192,8 @@ export class StellarService {
     governanceId: string,
     title: string,
     description: string,
-    action: any,
-  ): Promise<any> {
+    action: Record<string, unknown>,
+  ): Promise<unknown> {
     return this.invokeContract(governanceId, 'propose', [
       nativeToScVal(title, { type: 'string' }),
       nativeToScVal(description, { type: 'string' }),
@@ -201,14 +201,14 @@ export class StellarService {
     ]);
   }
 
-  async vote(governanceId: string, proposalId: number, support: boolean): Promise<any> {
+  async vote(governanceId: string, proposalId: number, support: boolean): Promise<unknown> {
     return this.invokeContract(governanceId, 'vote', [
       nativeToScVal(proposalId, { type: 'u32' }),
       nativeToScVal(support, { type: 'bool' }),
     ]);
   }
 
-  async execute(governanceId: string, proposalId: number): Promise<any> {
+  async execute(governanceId: string, proposalId: number): Promise<unknown> {
     return this.invokeContract(governanceId, 'execute', [
       nativeToScVal(proposalId, { type: 'u32' }),
     ]);
@@ -220,7 +220,7 @@ export class StellarService {
     startLedger?: number;
     contractIds?: string[];
     topics?: string[][];
-  }): Promise<any[]> {
+  }): Promise<unknown[]> {
     // Uses stellarClient to query getEvents
     const response = await this.stellarClient.getServer().getEvents({
       startLedger: filter.startLedger,
@@ -235,7 +235,7 @@ export class StellarService {
 
   async streamEvents(
     filter: { contractIds: string[]; topics?: string[][] },
-    _callback: (event: any) => void,
+    _callback: (event: unknown) => void,
   ): Promise<void> {
     this.logger.log(`Streaming events for contracts: ${filter.contractIds.join(', ')}`);
     // In a real app, this would be a long-running process or a subscription

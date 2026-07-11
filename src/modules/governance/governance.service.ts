@@ -27,7 +27,7 @@ export class GovernanceService {
   ) {}
 
   async getConfig(): Promise<GovernanceConfig> {
-    let config = await this.configRepo.findOne({ where: {} as any });
+    let config = await this.configRepo.findOne({ where: {} as Record<string, never> });
     if (!config) {
       config = this.configRepo.create({
         protocolFeeBps: 100,

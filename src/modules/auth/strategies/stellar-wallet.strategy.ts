@@ -11,7 +11,7 @@ export class StellarWalletStrategy extends PassportStrategy(Strategy, 'stellar-w
     super();
   }
 
-  authenticate(req: Request, _options?: any): void {
+  authenticate(req: Request, _options?: Record<string, unknown>): void {
     const { wallet, signature, challenge } = req.body || {};
 
     if (!wallet || !signature || !challenge) {

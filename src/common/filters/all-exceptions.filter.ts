@@ -24,7 +24,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = exception.getStatus();
       const exResponse = exception.getResponse();
       message =
-        typeof exResponse === 'string' ? exResponse : (exResponse as any).message || exResponse;
+        typeof exResponse === 'string' ? exResponse : (exResponse as { message?: string }).message || exResponse;
     }
 
     this.logger.error(

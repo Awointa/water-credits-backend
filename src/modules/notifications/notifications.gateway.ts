@@ -56,16 +56,16 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     }
   }
 
-  sendToUser(userId: string, event: string, data: any) {
+  sendToUser(userId: string, event: string, data: Record<string, unknown>) {
     this.server.to(`user:${userId}`).emit(event, data);
   }
 
-  broadcast(event: string, data: any) {
+  broadcast(event: string, data: Record<string, unknown>) {
     this.server.emit(event, data);
   }
 
   @SubscribeMessage('ping')
-  handlePing(client: Socket, data: any) {
+  handlePing(client: Socket, data: Record<string, unknown>) {
     return { event: 'pong', data };
   }
 }
