@@ -3,18 +3,26 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import Redis from 'ioredis';
 import { User, UserRole } from '../users/entities/user.entity';
 import { Keypair } from '@stellar/stellar-sdk';
 
+const CHALLENGE_TTL_SECONDS = 5 * 60; // 5 minutes
+const CHALLENGE_KEY_PREFIX = 'auth:challenge:';
+
 @Injectable()
-export class AuthService {
-  private challenges = new Map<string, { challenge: string; expiresAt: Date }>();
+export class AuthService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(AuthService.name);
+  private redis: Redis;
 
   constructor(
     @InjectRepository(User)
@@ -23,25 +31,62 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
+  onModuleInit(): void {
+    this.redis = new Redis({
+      host: this.configService.get<string>('queue.redisHost', 'localhost'),
+      port: this.configService.get<number>('queue.redisPort', 6379),
+      password: this.configService.get<string>('queue.redisPassword') || undefined,
+      // Isolated DB (default is 0) so challenge keys don't collide with queue data
+      db: this.configService.get<number>('REDIS_AUTH_DB', 1),
+      lazyConnect: true,
+      enableReadyCheck: false,
+    });
+    this.redis.on('error', (err) => this.logger.warn(`Redis auth client error: ${err.message}`));
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.redis.quit();
+  }
+
+  // ── Challenge ─────────────────────────────────────────────────────────────
+
   generateChallenge(wallet: string): { challenge: string; expiresAt: Date } {
     const challenge = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    this.challenges.set(wallet.toLowerCase(), { challenge, expiresAt });
+    const expiresAt = new Date(Date.now() + CHALLENGE_TTL_SECONDS * 1000);
+
+    // Persist asynchronously — fire and forget (errors logged above)
+    const key = `${CHALLENGE_KEY_PREFIX}${wallet.toLowerCase()}`;
+    this.redis
+      .set(key, challenge, 'EX', CHALLENGE_TTL_SECONDS)
+      .catch((err) => this.logger.error(`Failed to store challenge in Redis: ${err.message}`));
+
     return { challenge, expiresAt };
   }
+
+  // ── Signature validation ───────────────────────────────────────────────────
 
   async validateStellarSignature(
     wallet: string,
     signature: string,
     challenge: string,
   ): Promise<User | null> {
-    const key = wallet.toLowerCase();
-    const stored = this.challenges.get(key);
-    if (!stored || stored.challenge !== challenge) {
-      return null;
+    const key = `${CHALLENGE_KEY_PREFIX}${wallet.toLowerCase()}`;
+
+    // Atomically fetch + delete so the challenge can only be used once,
+    // even under concurrent requests (GETDEL is Redis ≥ 6.2)
+    let storedChallenge: string | null;
+    try {
+      storedChallenge = await this.redis.getdel(key);
+    } catch (err) {
+      // Fall back to GET + DEL on older Redis versions
+      this.logger.warn(`GETDEL failed, falling back to GET+DEL: ${(err as Error).message}`);
+      storedChallenge = await this.redis.get(key);
+      if (storedChallenge) {
+        await this.redis.del(key);
+      }
     }
-    if (stored.expiresAt < new Date()) {
-      this.challenges.delete(key);
+
+    if (!storedChallenge || storedChallenge !== challenge) {
       return null;
     }
 
@@ -51,14 +96,15 @@ export class AuthService {
       if (!valid) {
         return null;
       }
-      this.challenges.delete(key);
 
       const user = await this.userRepo.findOne({ where: { wallet, isActive: true } });
-      return user || null;
+      return user ?? null;
     } catch {
       return null;
     }
   }
+
+  // ── Login ─────────────────────────────────────────────────────────────────
 
   async login(
     wallet: string,
@@ -69,7 +115,6 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-
     if (!user.isActive) {
       throw new UnauthorizedException('Account is deactivated');
     }
@@ -78,9 +123,10 @@ export class AuthService {
     user.refreshToken = tokens.refreshToken;
     await this.userRepo.save(user);
 
-    const userData = { ...user };
-    return { ...tokens, user: userData };
+    return { ...tokens, user: { ...user } };
   }
+
+  // ── Register ──────────────────────────────────────────────────────────────
 
   async register(
     wallet: string,
@@ -89,14 +135,18 @@ export class AuthService {
     email?: string,
     displayName?: string,
   ): Promise<{ accessToken: string; refreshToken: string; user: Partial<User> }> {
-    const key = wallet.toLowerCase();
-    const stored = this.challenges.get(key);
-    if (!stored || stored.challenge !== challenge) {
-      throw new BadRequestException('Invalid challenge');
+    const key = `${CHALLENGE_KEY_PREFIX}${wallet.toLowerCase()}`;
+
+    let storedChallenge: string | null;
+    try {
+      storedChallenge = await this.redis.getdel(key);
+    } catch {
+      storedChallenge = await this.redis.get(key);
+      if (storedChallenge) await this.redis.del(key);
     }
-    if (stored.expiresAt < new Date()) {
-      this.challenges.delete(key);
-      throw new BadRequestException('Challenge expired');
+
+    if (!storedChallenge || storedChallenge !== challenge) {
+      throw new BadRequestException('Invalid or expired challenge');
     }
 
     try {
@@ -108,7 +158,6 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid signature');
     }
-    this.challenges.delete(key);
 
     const existing = await this.userRepo.findOne({ where: { wallet } });
     if (existing) {
@@ -117,8 +166,8 @@ export class AuthService {
 
     const user = this.userRepo.create({
       wallet,
-      email: email || null,
-      displayName: displayName || null,
+      email: email ?? null,
+      displayName: displayName ?? null,
       role: UserRole.FARMER,
     });
     await this.userRepo.save(user);
@@ -127,9 +176,10 @@ export class AuthService {
     user.refreshToken = tokens.refreshToken;
     await this.userRepo.save(user);
 
-    const userData = { ...user };
-    return { ...tokens, user: userData };
+    return { ...tokens, user: { ...user } };
   }
+
+  // ── Refresh ───────────────────────────────────────────────────────────────
 
   async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     try {
@@ -150,13 +200,17 @@ export class AuthService {
     }
   }
 
+  // ── Logout ────────────────────────────────────────────────────────────────
+
   async logout(userId: string): Promise<void> {
     await this.userRepo.update(userId, { refreshToken: null });
   }
 
+  // ── Token generation ──────────────────────────────────────────────────────
+
   private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
     const payload = { sub: user.id, wallet: user.wallet, role: user.role };
-    const expiresIn = this.configService.get<string>('jwt.expiration') || '7d';
+    const expiresIn = this.configService.get<string>('jwt.expiration') ?? '7d';
     const secret = this.configService.get<string>('jwt.secret');
 
     const [accessToken, refreshToken] = await Promise.all([
