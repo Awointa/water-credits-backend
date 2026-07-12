@@ -178,4 +178,14 @@ export class ProjectsService {
   async count(): Promise<number> {
     return this.projectRepo.count();
   }
+
+  async remove(id: string, userId: string): Promise<void> {
+    const project = await this.findById(id);
+
+    if (project.ownerId !== userId) {
+      throw new ForbiddenException('You can only delete your own projects');
+    }
+
+    await this.projectRepo.remove(project);
+  }
 }

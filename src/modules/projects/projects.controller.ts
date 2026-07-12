@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -64,5 +65,11 @@ export class ProjectsController {
   async countByOwner(@CurrentUser('id') userId: string): Promise<{ count: number }> {
     const count = await this.projectsService.countByOwner(userId);
     return { count };
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id') id: string, @CurrentUser('id') userId: string): Promise<void> {
+    return this.projectsService.remove(id, userId);
   }
 }
