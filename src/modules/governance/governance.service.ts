@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Proposal, ProposalStatus } from './entities/proposal.entity';
+import { ProposalVote } from './entities/proposal-vote.entity';
 import { GovernanceConfig } from './entities/governance-config.entity';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { VoteDto } from './dto/vote.dto';
@@ -21,6 +22,8 @@ export class GovernanceService {
   constructor(
     @InjectRepository(Proposal)
     private readonly proposalRepo: Repository<Proposal>,
+    @InjectRepository(ProposalVote)
+    private readonly voteRepo: Repository<ProposalVote>,
     @InjectRepository(GovernanceConfig)
     private readonly configRepo: Repository<GovernanceConfig>,
     private readonly configService: ConfigService,
@@ -110,6 +113,20 @@ export class GovernanceService {
     if (proposal.status !== ProposalStatus.ACTIVE) {
       throw new BadRequestException('Proposal is not active');
     }
+
+    const existingVote = await this.voteRepo.findOne({
+      where: { proposalId, voterWallet: voter },
+    });
+    if (existingVote) {
+      throw new BadRequestException('You have already voted on this proposal');
+    }
+
+    const voteRecord = this.voteRepo.create({
+      proposalId,
+      voterWallet: voter,
+      support: dto.approve,
+    });
+    await this.voteRepo.save(voteRecord);
 
     if (dto.approve) {
       proposal.votesFor += 1;
