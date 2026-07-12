@@ -20,6 +20,8 @@ interface RateLimitEntry {
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   private store = new Map<string, RateLimitEntry>();
+  private lastCleanup = Date.now();
+  private static readonly CLEANUP_INTERVAL_MS = 60_000;
 
   constructor(private readonly reflector: Reflector) {}
 
@@ -36,6 +38,10 @@ export class RateLimitGuard implements CanActivate {
     const key = request.ip || 'anonymous';
     const now = Date.now();
 
+    if (now - this.lastCleanup > RateLimitGuard.CLEANUP_INTERVAL_MS) {
+      this.cleanup(now);
+    }
+
     let entry = this.store.get(key);
     if (!entry || entry.resetAt < now) {
       entry = { count: 0, resetAt: now + limitMeta.windowMs };
@@ -48,5 +54,14 @@ export class RateLimitGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private cleanup(now: number): void {
+    for (const [key, entry] of this.store) {
+      if (entry.resetAt < now) {
+        this.store.delete(key);
+      }
+    }
+    this.lastCleanup = now;
   }
 }
