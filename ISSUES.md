@@ -82,7 +82,99 @@ Separately, `OracleService.getNextNonce()` (`src/modules/oracle/oracle.service.t
 
 ---
 
-## Issue #2 — Replace stub spec files with meaningful unit tests for oracle, sensor, and credit critical paths (target: 80% coverage)
+## Issue #2 — Fix sensor API key authentication: per-device bcrypt verification is never called, global key bypass defeats the entire security model
+
+**Labels:** `type: bug` · `area: sensors` · `area: security` · `difficulty: intermediate`
+**Reward tier:** 🔴 High
+
+---
+
+### Why this matters now
+
+The v0.1 README documents sensor authentication as _"API keys stored hashed (bcrypt) in database, associated with a device."_ The implementation generates per-device keys with bcrypt hashing (`api-key.util.ts`) and even stores a `SensorDevice.apiKeyHash` column. But the actual authentication in `SensorsController.ingestReading()` compares the raw `x-api-key` header against a single **global** config value (`app.sensorApiKey`), completely bypassing `verifyDeviceApiKey()`. The bcrypt hash infrastructure is functionally dead code. This means: any sensor with the single shared key can submit readings for any project, device impersonation is trivially possible, and the per-device key rotation/revocation model the README promises doesn't exist. This must be fixed before any testnet data is considered meaningful.
+
+---
+
+### Problem / What
+
+`SensorsController.ingestReading()` (`src/modules/sensors/sensors.controller.ts:30–40`):
+
+```typescript
+const expectedKey = this.configService.get<string>('app.sensorApiKey');
+if (expectedKey && apiKey !== expectedKey) {
+  throw new UnauthorizedException('Invalid API key');
+}
+```
+
+This is a string equality check against one environment variable. The `verifyDeviceApiKey()` function in `src/common/utils/api-key.util.ts` — which does the correct bcrypt comparison against the per-device hash — is **never called anywhere in the request path**.
+
+The consequence:
+
+- All registered devices share one authentication credential
+- A compromised key compromises every device simultaneously
+- Device deregistration/rotation has no effect on authentication
+- The `deviceId` in the request body is fully trusted with no cryptographic binding to the API key — any caller with the global key can forge readings for any `deviceId`
+- `SensorDevice.apiKeyHash` is populated on registration but never read on ingestion
+
+---
+
+### Why it's hard
+
+- The correct fix requires loading the `SensorDevice` record **before** validating the key, which means the controller needs a database lookup in the auth path — the lookup must be efficient (device ID is already indexed) and must not leak timing information (bcrypt compare must run even for unknown device IDs to prevent enumeration)
+- The `@Public()` decorator bypasses `JwtAuthGuard` entirely on this route; the per-device key check must replace JWT auth cleanly without removing the `@Public()` designation (sensors don't have user accounts)
+- The `deviceId` is currently in the request body (`CreateReadingDto`), not the header. The auth check needs to bind the presented API key to the specific device identified in the body — after parsing the body but before executing business logic. This either requires a custom guard that can access `req.body`, or moving `deviceId` to a header, or extracting the device lookup into the guard via `ExecutionContext`
+- The `verifyDeviceApiKey()` function extracts the secret by splitting on `_` and taking the last segment (`parts[parts.length - 1]`). This means the key format `wc_<deviceId>_<secret>` is load-bearing — a device whose `deviceId` contains underscores will silently extract the wrong secret segment. This edge case must be handled or the key format must be changed
+- Timing-safe comparison: `bcrypt.compare` is already timing-safe for the hash comparison, but the device lookup itself (found vs. not found) creates a timing difference that could be exploited for device ID enumeration. The fix should run `bcrypt.compare` against a dummy hash on miss
+
+---
+
+### Acceptance Criteria
+
+- [ ] `ingestReading()` authenticates using the per-device `apiKeyHash` from `SensorDevice`, not a global config value
+- [ ] `verifyDeviceApiKey()` is called in the request path for every `POST /sensors/readings` request
+- [ ] A valid key for device A cannot authenticate a reading submitted with `deviceId: B`
+- [ ] An unknown `deviceId` triggers a bcrypt compare against a constant dummy hash (prevents timing-based device enumeration)
+- [ ] Device IDs containing underscores are handled correctly (or explicitly rejected at registration)
+- [ ] The global `app.sensorApiKey` config value is removed or documented as deprecated
+- [ ] Unit test: valid key + correct deviceId → accepted
+- [ ] Unit test: valid key + wrong deviceId → rejected
+- [ ] Unit test: invalid key + correct deviceId → rejected
+- [ ] Unit test: unknown deviceId → rejected (and takes approximately the same time as a known-device rejection)
+- [ ] The `@Public()` decorator remains on the route; sensor ingestion does not require a JWT
+
+---
+
+### Relevant files / functions
+
+| File | Notes |
+|---|---|
+| `src/modules/sensors/sensors.controller.ts:30–40` | Broken auth — main target |
+| `src/common/utils/api-key.util.ts` | `verifyDeviceApiKey()` — never called on ingestion path |
+| `src/modules/sensors/sensors.service.ts:60–90` | `registerDevice()` — generates and stores the hash correctly |
+| `src/modules/sensors/entities/sensor-device.entity.ts` | `apiKeyHash` column |
+| `src/modules/sensors/dto/create-reading.dto.ts` | `deviceId` is in the body |
+| `src/config/app.config.ts` | `sensorApiKey` config value to remove/deprecate |
+
+---
+
+### Out of scope
+
+- Do not change the key generation format unless the underscore edge case requires it
+- Do not add rate limiting to the sensor ingestion endpoint (separate concern)
+- Do not implement key rotation UI or API (beyond what already exists in `registerDevice`)
+- Do not add JWT authentication to sensor routes
+
+---
+
+### Self-check
+
+> If solved, this issue moves the v0.3 _"rate limiting and abuse protection hardening"_ goal and the pre-v1.0 _"security audit"_ forward because it closes a fundamental authentication bypass that makes every other sensor security control irrelevant.
+
+---
+
+---
+
+## Issue #3 — Replace stub spec files with meaningful unit tests for oracle, sensor, and credit critical paths (target: 80% coverage)
 
 **Labels:** `type: test` · `area: oracle` · `area: sensors` · `area: credits` · `area: auth` · `difficulty: intermediate`
 **Reward tier:** 🟡 Medium-High
@@ -159,3 +251,100 @@ The specific untested paths that matter most:
 ### Self-check
 
 > If solved, this issue moves the v0.2 _"complete unit test coverage (target 80%)"_ goal forward because the three core services that handle all on-chain-bound data currently have no meaningful test coverage, making regressions invisible until they hit testnet.
+
+---
+
+## Issue #4 — Fix governance double-vote race condition and missing on-chain execution in `GovernanceService`
+
+**Labels:** `type: bug` · `area: governance` · `area: stellar` · `difficulty: advanced`
+**Reward tier:** 🔴 High
+
+---
+
+### Why this matters now
+
+Governance controls protocol parameters that directly affect credit issuance — oracle fee thresholds, quorum sizes, timelock periods. A double-vote exploit allows any authenticated user to pass or reject any proposal by voting twice in a concurrent window, bypassing the quorum mechanism entirely. Separately, `executeProposal()` transitions the proposal to `EXECUTED` in the database but never calls the Soroban governance contract — meaning "executed" proposals have no on-chain effect. Both bugs must be fixed before governance is used on testnet.
+
+---
+
+### Problem / What
+
+**Bug 1 — Double-vote race condition (`governance.service.ts:112–145`)**
+
+`vote()` checks for an existing vote then saves a new one in two separate, non-transactional operations:
+
+```typescript
+const existingVote = await this.voteRepo.findOne(...)  // read
+// ← race window: two concurrent requests both pass this check
+await this.voteRepo.save(voteRecord)                    // write
+proposal.votesFor += 1
+await this.proposalRepo.save(proposal)                  // write
+```
+
+There is no unique constraint on `(proposal_id, voter_wallet)` in the `ProposalVote` entity, no `SELECT FOR UPDATE`, and no database-level uniqueness enforcement. Two simultaneous `POST /governance/proposals/:id/vote` requests from the same wallet will both pass the `existingVote` check and each increment `votesFor`, adding 2 votes from one wallet. On a quorum of 3, this means a single voter can pass any proposal alone with two rapid requests.
+
+**Bug 2 — `executeProposal()` never calls Soroban (`governance.service.ts:147–167`)**
+
+```typescript
+proposal.status = ProposalStatus.EXECUTED;
+const saved = await this.proposalRepo.save(proposal);
+// StellarService is not injected — nothing is submitted on-chain
+return saved;
+```
+
+`GovernanceModule` does not import `StellarModule`. The timelock check is correct, but the actual contract call (`stellarService.execute(governanceId, proposalId)`) is absent. Proposals "execute" only in the off-chain DB, which means parameter changes (fee basis points, oracle thresholds, quorum) never reach the Soroban governance contract and have no real effect.
+
+**Bug 3 — `votesFor`/`votesAgainst` are in-memory increments on a stale read**
+
+Even without a race, `proposal.votesFor += 1` operates on the object loaded at the start of the request. Under load, two sequential votes can both read `votesFor = 5`, both write `votesFor = 6`, and one vote is silently lost. The correct approach is `UPDATE ... SET votes_for = votes_for + 1` (atomic SQL increment).
+
+---
+
+### Why it's hard
+
+- The double-vote fix requires both a unique DB constraint on `(proposal_id, voter_wallet)` **and** a database-level transaction wrapping the vote insert and proposal update — the constraint alone is not enough because the `proposal.votesFor` increment is a non-atomic read-modify-write
+- The atomic increment fix requires switching from `entity.save()` to a TypeORM query builder `UPDATE ... SET votes_for = votes_for + 1 WHERE id = :id` inside the same transaction, then reloading the entity to check the quorum threshold — the reload adds a DB round-trip that must not create a new race window
+- `executeProposal()` needs `StellarService` injected, but `GovernanceModule` must import `StellarModule` without creating a circular dependency. The `execute()` call on Soroban takes a `proposalId` as a `u32` but the local entity uses a UUID string — there needs to be either a mapping or a separate `onChainProposalId` field on the `Proposal` entity (which requires a migration)
+- The timelock check computes `elapsed` from `proposal.deadline` rather than `proposal.executedAt` or an on-chain timestamp. After the Soroban call is added, the check should be validated against the network's ledger time, not local server time, to prevent clock-skew exploits
+
+---
+
+### Acceptance Criteria
+
+- [ ] A unique constraint exists on `(proposal_id, voter_wallet)` in the `ProposalVote` entity and a corresponding migration is provided
+- [ ] The `vote()` method wraps the duplicate check, vote insert, and `votesFor`/`votesAgainst` update in a single database transaction
+- [ ] `votesFor` and `votesAgainst` are incremented with an atomic SQL `UPDATE` (not a read-modify-write on the in-memory object)
+- [ ] Two concurrent `vote()` calls from the same wallet result in exactly one accepted vote and one `409 Conflict` (or `400 Bad Request`) — verifiable with a unit test using `Promise.all`
+- [ ] `executeProposal()` calls `stellarService.execute()` with the correct arguments before updating the local status to `EXECUTED`
+- [ ] Local status is only set to `EXECUTED` after the Soroban transaction confirms (not before)
+- [ ] If the Soroban call fails, the local status remains `PASSED` and the error is propagated so the caller can retry
+- [ ] A migration is provided if `Proposal` requires a new `onChainProposalId` column
+- [ ] Unit tests cover: concurrent double-vote (race), sequential double-vote (non-race), quorum threshold crossing, timelock not-yet-elapsed rejection, and Soroban execution failure leaving status as `PASSED`
+
+---
+
+### Relevant files / functions
+
+| File | Notes |
+|---|---|
+| `src/modules/governance/governance.service.ts:112–167` | `vote()` race + `executeProposal()` stub — main targets |
+| `src/modules/governance/entities/proposal-vote.entity.ts` | Needs unique constraint on `(proposal_id, voter_wallet)` |
+| `src/modules/governance/entities/proposal.entity.ts` | May need `onChainProposalId` field |
+| `src/modules/governance/governance.module.ts` | Needs `StellarModule` import |
+| `src/modules/stellar/stellar.service.ts:195–202` | `execute()` — the target call |
+| `src/migrations/006_governance_enhancements.sql` | Reference for existing schema; new migration goes alongside |
+
+---
+
+### Out of scope
+
+- Do not change the quorum calculation model (votes-for > votes-against)
+- Do not add weighted voting or token-based voting power (v1.0 scope)
+- Do not implement proposal creation on-chain (only `execute` needs Soroban wiring here)
+- Do not change the timelock duration configuration
+
+---
+
+### Self-check
+
+> If solved, this issue moves the v0.2 _"live Soroban testnet integration end-to-end"_ and the pre-v1.0 _"security audit"_ goals forward because governance currently accepts fraudulent votes and executes proposals that have no on-chain effect — both of which would fail an audit immediately.
