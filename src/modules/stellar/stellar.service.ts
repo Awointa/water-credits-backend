@@ -174,12 +174,31 @@ export class StellarService {
     projectId: string,
     reading: { value: number },
     nonce: number,
-  ): Promise<unknown> {
-    return this.invokeContract(oracleContractId, 'submit_reading', [
-      nativeToScVal(projectId, { type: 'string' }),
-      nativeToScVal(reading.value, { type: 'i128' }), // Simplified
-      nativeToScVal(nonce, { type: 'u32' }),
-    ]);
+  ): Promise<{ txHash: string; response: SorobanRpc.Api.GetTransactionResponse }> {
+    const keypair = this.stellarClient.getKeypair();
+    const network = await this.getNetwork();
+    const account = await this.buildAccount(keypair);
+
+    const contract = new Contract(oracleContractId);
+    let tx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: network.passphrase,
+    })
+      .addOperation(
+        contract.call(
+          'submit_reading',
+          nativeToScVal(projectId, { type: 'string' }),
+          nativeToScVal(reading.value, { type: 'i128' }),
+          nativeToScVal(nonce, { type: 'u32' }),
+        ),
+      )
+      .setTimeout(30)
+      .build();
+
+    tx = await this.stellarClient.prepareTx(tx);
+    tx.sign(keypair);
+
+    return this.stellarClient.sendTxWithHash(tx);
   }
 
   async addOracle(oracleContractId: string, oracleAddress: string): Promise<unknown> {
