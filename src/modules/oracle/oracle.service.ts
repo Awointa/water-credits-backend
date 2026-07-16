@@ -1,8 +1,8 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { OracleSubmission, SubmissionStatus } from './entities/oracle-submission.entity';
 import { OracleQueryDto } from './dto/oracle-query.dto';
@@ -31,6 +31,7 @@ export class OracleService {
     @InjectQueue('oracle-submit')
     private readonly oracleQueue: Queue,
     private readonly configService: ConfigService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getStatus(): Promise<{
@@ -89,29 +90,40 @@ export class OracleService {
   }
 
   async triggerSubmission(dto: TriggerSubmissionDto): Promise<OracleSubmission> {
-    const nonce = await this.getNextNonce(dto.oracleAddress);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    const existing = await this.submissionRepo.findOne({
-      where: {
+    let saved: OracleSubmission;
+    try {
+      // Acquire a row-level lock on the latest nonce for this oracle address so
+      // that concurrent callers are serialised and cannot read the same value.
+      const [row]: [{ max_nonce: string | null }] = await queryRunner.query(
+        `SELECT MAX(nonce) AS max_nonce
+           FROM oracle_submissions
+          WHERE oracle_address = $1
+          FOR UPDATE`,
+        [dto.oracleAddress],
+      );
+      const nonce = (row.max_nonce !== null ? parseInt(row.max_nonce, 10) : 0) + 1;
+
+      const submission = queryRunner.manager.create(OracleSubmission, {
         projectId: dto.projectId,
         oracleAddress: dto.oracleAddress,
         nonce,
-      },
-    });
-    if (existing) {
-      throw new BadRequestException('Submission with this nonce already exists');
+        txHash: '',
+        status: SubmissionStatus.PENDING,
+        readingsSnapshot: dto.readings ?? {},
+      });
+
+      saved = await queryRunner.manager.save(OracleSubmission, submission);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    const submission = this.submissionRepo.create({
-      projectId: dto.projectId,
-      oracleAddress: dto.oracleAddress,
-      nonce,
-      txHash: '',
-      status: SubmissionStatus.PENDING,
-      readingsSnapshot: dto.readings ?? {},
-    });
-
-    const saved = await this.submissionRepo.save(submission);
 
     await this.oracleQueue.add(
       'oracle-submit-job',
@@ -119,7 +131,7 @@ export class OracleService {
         submissionId: saved.id,
         projectId: dto.projectId,
         oracleAddress: dto.oracleAddress,
-        nonce,
+        nonce: saved.nonce,
       },
       {
         attempts: 3,
@@ -203,13 +215,5 @@ export class OracleService {
     const sorted = [...values].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-
-  private async getNextNonce(oracleAddress: string): Promise<number> {
-    const last = await this.submissionRepo.findOne({
-      where: { oracleAddress },
-      order: { nonce: 'DESC' },
-    });
-    return (last?.nonce ?? 0) + 1;
   }
 }
