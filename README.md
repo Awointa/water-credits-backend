@@ -40,7 +40,9 @@
 - [Testing Strategy](#-testing-strategy)
 - [Monitoring & Observability](#-monitoring--observability)
 - [Security](#-security)
+- [Roadmap](#-roadmap)
 - [Contributing](#-contributing)
+- [Contact](#-contact)
 - [License](#-license)
 
 ---
@@ -1384,6 +1386,58 @@ Available at `GET /metrics`:
 
 ---
 
+## 🗺️ Roadmap
+
+### Current Status — v0.1 (July 2026)
+
+The core infrastructure is in place. The backend boots, all modules are scaffolded, migrations run, and the CI pipeline is green. The project is in **active early development** — not yet ready for production use.
+
+| Area | Status |
+|---|---|
+| Project scaffolding & module structure | ✅ Done |
+| Database migrations (users, projects, sensors, oracle, governance) | ✅ Done |
+| Auth module (Stellar wallet challenge-response + JWT) | ✅ Done |
+| Users module (CRUD, role management) | ✅ Done |
+| Projects module (full lifecycle) | ✅ Done |
+| Sensors module (ingestion, WebSocket gateway) | ✅ Done |
+| Credits module (balance queries, retirement flow) | ✅ Done |
+| Oracle module (Bull queue, Soroban submission) | ✅ Done |
+| Governance module (proposals, voting) | ✅ Done |
+| Analytics module | ✅ Done |
+| Notifications module (in-app + email) | ✅ Done |
+| Health check & Prometheus metrics | ✅ Done |
+| Docker & docker-compose setup | ✅ Done |
+| Unit & e2e test coverage | 🔄 In progress |
+| Stellar Soroban contract integration (live testnet) | 🔄 In progress |
+| IPFS document/certificate upload | 🔄 In progress |
+| KYC integration | 📋 Planned |
+| Frontend (Angular) integration | 📋 Planned |
+| Mainnet deployment hardening | 📋 Planned |
+| Audit (security + smart contracts) | 📋 Planned |
+
+### v0.2 — Target: Q3 2026
+
+- Complete unit test coverage (target 80%)
+- Live Soroban testnet integration end-to-end
+- Sensor simulator script for local development
+- IPFS certificate upload on retirement confirmation
+
+### v0.3 — Target: Q4 2026
+
+- Angular frontend integration
+- KYC provider integration
+- Rate limiting and abuse protection hardening
+- Performance benchmarks and query optimisation
+
+### v1.0 — Target: Q1 2027
+
+- Security audit complete
+- Mainnet deployment
+- Operator runbook and monitoring playbooks
+- Public API documentation (OpenAPI / Swagger)
+
+---
+
 ## 🤝 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -1391,7 +1445,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ### Quick Start
 
 ```bash
-git clone https://github.com/your-org/water-credits-backend
+git clone https://github.com/water-credits/water-credits-backend
 git checkout -b feat/your-feature
 
 # Install
@@ -1414,6 +1468,20 @@ npm test
 git commit -m "feat: add endpoint for batch credit issuance"
 git push origin feat/your-feature
 ```
+
+---
+
+## 📬 Contact
+
+| Channel | Details |
+|---|---|
+| **GitHub Issues** | Bug reports and feature requests — [open an issue](https://github.com/water-credits/water-credits-backend/issues) |
+| **GitHub Discussions** | Questions, ideas, and general discussion — [start a discussion](https://github.com/water-credits/water-credits-backend/discussions) |
+| **Telegram** | Direct questions and community chat — [@Escelit](https://t.me/Escelit) |
+| **Email** | General enquiries — [ogazipromise81@gmail.com](mailto:ogazipromise81@gmail.com) |
+| **Security vulnerabilities** | Do **not** open a public issue. See [SECURITY.md](SECURITY.md) for the responsible disclosure process |
+
+> For anything sensitive or urgent that can't go through GitHub, reach out to the maintainers directly via the contact details in [SECURITY.md](SECURITY.md).
 
 ---
 

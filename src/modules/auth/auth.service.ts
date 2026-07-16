@@ -142,7 +142,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       storedChallenge = await this.redis.getdel(key);
     } catch {
       storedChallenge = await this.redis.get(key);
-      if (storedChallenge) await this.redis.del(key);
+      if (storedChallenge) {
+        await this.redis.del(key);
+      }
     }
 
     if (!storedChallenge || storedChallenge !== challenge) {

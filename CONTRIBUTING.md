@@ -55,6 +55,24 @@ npm run start:dev
 
 The API will be available at `http://localhost:3001`.
 
+### Stellar Keypair Setup
+
+The backend needs a Stellar account to sign oracle submissions and interact with Soroban contracts. For local development, generate a testnet keypair using the [Stellar Laboratory](https://laboratory.stellar.org/#account-creator?network=test):
+
+1. Go to the Stellar Laboratory Account Creator (testnet)
+2. Click **Generate keypair** — you'll get a public key (`G...`) and secret key (`S...`)
+3. Click **Fund account with Friendbot** to activate it on testnet
+4. Set the values in your `.env`:
+
+```bash
+STELLAR_BACKEND_PUBLIC=GABC...   # the G... key
+STELLAR_BACKEND_SECRET=SABC...   # the S... key
+```
+
+> **Never commit your secret key.** The `.gitignore` already excludes `.env`, but double-check before pushing.
+
+For oracle-specific keys, repeat the same steps and populate `ORACLE_ADDRESS` and `ORACLE_SECRET`.
+
 ### Using Docker (alternative)
 
 ```bash
@@ -285,6 +303,8 @@ Include:
 ## Questions & Discussion
 
 - Open a [Discussion](https://github.com/water-credits/water-credits-backend/discussions)
+- Chat directly on Telegram — [@Escelit](https://t.me/Escelit)
+- Email general enquiries to [ogazipromise81@gmail.com](mailto:ogazipromise81@gmail.com)
 - Check existing issues and PRs before posting
 
 ---

@@ -15,8 +15,7 @@ export class HealthController {
   @Public()
   async check(@Res() res: Response): Promise<void> {
     const report: HealthReport = await this.healthService.getHealth();
-    const httpStatus =
-      report.status === 'down' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
+    const httpStatus = report.status === 'down' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
     res.status(httpStatus).json(report);
   }
 

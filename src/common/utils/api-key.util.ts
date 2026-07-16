@@ -26,7 +26,9 @@ export async function generateDeviceApiKey(deviceId: string): Promise<{
  */
 export async function verifyDeviceApiKey(plaintext: string, hash: string): Promise<boolean> {
   const parts = plaintext.split('_');
-  if (parts.length < 3) return false;
+  if (parts.length < 3) {
+    return false;
+  }
   const secret = parts[parts.length - 1];
   return bcrypt.compare(secret, hash);
 }
