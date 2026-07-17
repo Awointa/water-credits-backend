@@ -1,50 +1,60 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CreditsService } from './credits.service';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Retirement } from './entities/retirement.entity';
 import { getQueueToken } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
+import { CreditsService } from './credits.service';
+import { Retirement } from './entities/retirement.entity';
+import { RetireCreditsDto } from './dto/retire-credits.dto';
+
+// ── Typed mock factories ──────────────────────────────────────────────────────
+
+type RetirementRepoMock = {
+  find: jest.Mock;
+  findOne: jest.Mock;
+  create: jest.Mock;
+  save: jest.Mock;
+  createQueryBuilder: jest.Mock;
+};
+
+function makeRetirementRepo(): RetirementRepoMock {
+  return {
+    find: jest.fn().mockResolvedValue([]),
+    findOne: jest.fn().mockResolvedValue(null),
+    create: jest.fn(),
+    save: jest.fn(),
+    createQueryBuilder: jest.fn(() => ({
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+    })),
+  };
+}
+
+// ── Test suite ────────────────────────────────────────────────────────────────
 
 describe('CreditsService', () => {
   let service: CreditsService;
+  let retirementRepo: RetirementRepoMock;
+  let retirementsQueue: { add: jest.Mock };
 
   beforeEach(async () => {
+    retirementRepo = makeRetirementRepo();
+    retirementsQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CreditsService,
-        {
-          provide: getRepositoryToken(Retirement),
-          useValue: {
-            find: jest.fn(),
-            findOne: jest.fn(),
-            create: jest.fn(),
-            save: jest.fn(),
-            createQueryBuilder: jest.fn(() => ({
-              select: jest.fn().mockReturnThis(),
-              addSelect: jest.fn().mockReturnThis(),
-              where: jest.fn().mockReturnThis(),
-              groupBy: jest.fn().mockReturnThis(),
-              getRawOne: jest.fn(),
-              getRawMany: jest.fn(),
-              skip: jest.fn().mockReturnThis(),
-              take: jest.fn().mockReturnThis(),
-              orderBy: jest.fn().mockReturnThis(),
-              getManyAndCount: jest.fn(),
-            })),
-          },
-        },
-        {
-          provide: getQueueToken('retirements'),
-          useValue: {
-            add: jest.fn(),
-          },
-        },
-        {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn(),
-          },
-        },
+        { provide: getRepositoryToken(Retirement), useValue: retirementRepo },
+        { provide: getQueueToken('retirements'), useValue: retirementsQueue },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 
@@ -53,5 +63,432 @@ describe('CreditsService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  // ── retire — amount validation ───────────────────────────────────────────
+
+  describe('retire — amount validation', () => {
+    it('throws BadRequestException when amount is zero', async () => {
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-1',
+        amount: 0,
+        purpose: 'compliance',
+      };
+
+      await expect(service.retire('user-1', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.retire('user-1', dto)).rejects.toThrow('Amount must be positive');
+    });
+
+    it('throws BadRequestException when amount is negative', async () => {
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-1',
+        amount: -100,
+        purpose: 'compliance',
+      };
+
+      await expect(service.retire('user-1', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.retire('user-1', dto)).rejects.toThrow('Amount must be positive');
+    });
+
+    it('does not throw when amount is a small positive value', async () => {
+      const saved: Partial<Retirement> = {
+        id: 'ret-uuid-1',
+        userId: 'user-1',
+        projectId: 'proj-1',
+        amount: 0.000001,
+        purpose: 'compliance',
+        txHash: '',
+        retiredAt: new Date(),
+      };
+
+      retirementRepo.create.mockReturnValue(saved as Retirement);
+      retirementRepo.save.mockResolvedValue(saved as Retirement);
+
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-1',
+        amount: 0.000001,
+        purpose: 'compliance',
+      };
+
+      const result = await service.retire('user-1', dto);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ── retire — queue job payload ────────────────────────────────────────────
+
+  describe('retire — queue job payload', () => {
+    it('enqueues a job with the correct shape after saving the retirement record', async () => {
+      const saved: Partial<Retirement> = {
+        id: 'ret-uuid-42',
+        userId: 'user-99',
+        projectId: 'proj-abc',
+        amount: 5000,
+        purpose: 'voluntary',
+        metadataUri: 'ipfs://QmTest',
+        txHash: '',
+        retiredAt: new Date(),
+      };
+
+      retirementRepo.create.mockReturnValue(saved as Retirement);
+      retirementRepo.save.mockResolvedValue(saved as Retirement);
+
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-abc',
+        amount: 5000,
+        purpose: 'voluntary',
+        metadataUri: 'ipfs://QmTest',
+      };
+
+      await service.retire('user-99', dto);
+
+      expect(retirementsQueue.add).toHaveBeenCalledWith(
+        'process-retirement',
+        {
+          retirementId: 'ret-uuid-42',
+          userId: 'user-99',
+          projectId: 'proj-abc',
+          amount: 5000,
+          purpose: 'voluntary',
+        },
+        expect.objectContaining({ attempts: 5 }),
+      );
+    });
+
+    it('returns the saved Retirement record', async () => {
+      const saved: Partial<Retirement> = {
+        id: 'ret-uuid-1',
+        userId: 'user-1',
+        projectId: 'proj-1',
+        amount: 100,
+        purpose: 'compliance',
+        txHash: '',
+        retiredAt: new Date(),
+      };
+
+      retirementRepo.create.mockReturnValue(saved as Retirement);
+      retirementRepo.save.mockResolvedValue(saved as Retirement);
+
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-1',
+        amount: 100,
+        purpose: 'compliance',
+      };
+
+      const result = await service.retire('user-1', dto);
+      expect(result.id).toBe('ret-uuid-1');
+    });
+  });
+
+  // ── retire — partial failure: queue throws after DB save ─────────────────
+  //
+  // Behaviour contract: if the DB save succeeds but the queue.add() throws,
+  // the Retirement record is already persisted.  The service re-throws so the
+  // caller is aware of the failure and can retry or alert.  The orphaned DB
+  // record is not rolled back here — a separate reconciliation job is
+  // responsible for detecting retirements without an associated queue job and
+  // re-enqueuing them.
+
+  describe('retire — partial failure (queue throws after DB save)', () => {
+    it('re-throws the queue error and the DB record is already saved', async () => {
+      const saved: Partial<Retirement> = {
+        id: 'ret-orphan-1',
+        userId: 'user-1',
+        projectId: 'proj-1',
+        amount: 500,
+        purpose: 'compliance',
+        txHash: '',
+        retiredAt: new Date(),
+      };
+
+      retirementRepo.create.mockReturnValue(saved as Retirement);
+      retirementRepo.save.mockResolvedValue(saved as Retirement);
+
+      const queueError = new Error('Redis connection refused');
+      retirementsQueue.add.mockRejectedValue(queueError);
+
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-1',
+        amount: 500,
+        purpose: 'compliance',
+      };
+
+      // The error from queue.add propagates to the caller.
+      await expect(service.retire('user-1', dto)).rejects.toThrow('Redis connection refused');
+
+      // The DB record was saved before the queue call.
+      expect(retirementRepo.save).toHaveBeenCalledTimes(1);
+
+      // The queue failed — job was attempted.
+      expect(retirementsQueue.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call queue.add when retirementRepo.save throws', async () => {
+      retirementRepo.create.mockReturnValue({ amount: 500 } as Retirement);
+      retirementRepo.save.mockRejectedValue(new Error('DB write error'));
+
+      const dto: RetireCreditsDto = {
+        projectId: 'proj-1',
+        amount: 500,
+        purpose: 'compliance',
+      };
+
+      await expect(service.retire('user-1', dto)).rejects.toThrow('DB write error');
+      expect(retirementsQueue.add).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── getCertificate ───────────────────────────────────────────────────────
+
+  describe('getCertificate', () => {
+    it('returns the retirement when it belongs to the requesting user', async () => {
+      const retirement: Partial<Retirement> = {
+        id: 'ret-1',
+        userId: 'user-1',
+        projectId: 'proj-1',
+        amount: 100,
+        purpose: 'compliance',
+      };
+      retirementRepo.findOne.mockResolvedValue(retirement as Retirement);
+
+      const result = await service.getCertificate('ret-1', 'user-1');
+      expect(result).toEqual(retirement);
+    });
+
+    it('throws NotFoundException when no retirement matches the id/userId pair', async () => {
+      retirementRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getCertificate('ret-not-mine', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // ── getTotalRetired ──────────────────────────────────────────────────────
+
+  describe('getTotalRetired', () => {
+    it('returns 0 when there are no retirements', async () => {
+      // Override the qb mock for this specific test so getRawOne returns zero.
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+      };
+      retirementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const total = await service.getTotalRetired();
+      expect(total).toBe(0);
+    });
+
+    it('returns the summed retirement amount as a number', async () => {
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getRawOne: jest.fn().mockResolvedValue({ total: '12345.678900' }),
+      };
+      retirementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const total = await service.getTotalRetired();
+      expect(total).toBeCloseTo(12345.6789);
+    });
+  });
+});
+
+// ── Additional describe block for getPortfolio and getRetirements ─────────
+
+describe('CreditsService — getPortfolio and getRetirements', () => {
+  let service: CreditsService;
+  let retirementRepo: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
+  let retirementsQueue: { add: jest.Mock };
+
+  beforeEach(async () => {
+    retirementRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
+      save: jest.fn(),
+      createQueryBuilder: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+      })),
+    };
+    retirementsQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CreditsService,
+        { provide: getRepositoryToken(Retirement), useValue: retirementRepo },
+        { provide: getQueueToken('retirements'), useValue: retirementsQueue },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get<CreditsService>(CreditsService);
+  });
+
+  // ── getPortfolio ────────────────────────────────────────────────────────
+
+  describe('getPortfolio', () => {
+    it('returns an empty portfolio when the user has no retirements', async () => {
+      retirementRepo.find.mockResolvedValue([]);
+
+      const result = await service.getPortfolio('user-1');
+
+      expect(result.totalRetired).toBe(0);
+      expect(result.projects).toHaveLength(0);
+    });
+
+    it('aggregates retirements by project correctly', async () => {
+      const retirements: Partial<Retirement>[] = [
+        {
+          id: 'r-1',
+          userId: 'user-1',
+          projectId: 'proj-a',
+          amount: 100,
+          project: { name: 'Green Valley' } as never,
+        },
+        {
+          id: 'r-2',
+          userId: 'user-1',
+          projectId: 'proj-a',
+          amount: 200,
+          project: { name: 'Green Valley' } as never,
+        },
+        {
+          id: 'r-3',
+          userId: 'user-1',
+          projectId: 'proj-b',
+          amount: 50,
+          project: { name: 'Blue River' } as never,
+        },
+      ];
+      retirementRepo.find.mockResolvedValue(retirements as Retirement[]);
+
+      const result = await service.getPortfolio('user-1');
+
+      expect(result.totalRetired).toBe(350);
+      expect(result.projects).toHaveLength(2);
+
+      const projA = result.projects.find((p) => p.projectId === 'proj-a');
+      expect(projA).toBeDefined();
+      expect(projA!.retired).toBe(300);
+      expect(projA!.certificateCount).toBe(2);
+      expect(projA!.projectName).toBe('Green Valley');
+
+      const projB = result.projects.find((p) => p.projectId === 'proj-b');
+      expect(projB!.retired).toBe(50);
+    });
+
+    it('uses "Unknown" as projectName when project relation is null', async () => {
+      const retirements: Partial<Retirement>[] = [
+        { id: 'r-1', userId: 'user-1', projectId: 'proj-x', amount: 10, project: null as never },
+      ];
+      retirementRepo.find.mockResolvedValue(retirements as Retirement[]);
+
+      const result = await service.getPortfolio('user-1');
+      expect(result.projects[0].projectName).toBe('Unknown');
+    });
+  });
+
+  // ── getRetirements ──────────────────────────────────────────────────────
+
+  describe('getRetirements', () => {
+    it('returns paginated retirements for a user', async () => {
+      const retirements = [{ id: 'r-1' }, { id: 'r-2' }] as Retirement[];
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([retirements, 2]),
+        getRawOne: jest.fn(),
+      };
+      retirementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.getRetirements('user-1', {
+        skip: 0,
+        limit: 20,
+        page: 1,
+      } as never);
+
+      expect(result.data).toHaveLength(2);
+      expect(result.total).toBe(2);
+    });
+
+    it('filters by projectId and date range when provided', async () => {
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+        getRawOne: jest.fn(),
+      };
+      retirementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getRetirements('user-1', {
+        projectId: 'proj-1',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        skip: 0,
+        limit: 20,
+        page: 1,
+      } as never);
+
+      // andWhere should be called for projectId, startDate, and endDate
+      expect(qb.andWhere).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ── findByProject ────────────────────────────────────────────────────────
+
+  describe('findByProject', () => {
+    it('returns all retirements for a given project', async () => {
+      const retirements = [{ id: 'r-1', projectId: 'proj-1' }] as Retirement[];
+      retirementRepo.find.mockResolvedValue(retirements);
+
+      const result = await service.findByProject('proj-1');
+      expect(result).toEqual(retirements);
+      expect(retirementRepo.find).toHaveBeenCalledWith({
+        where: { projectId: 'proj-1' },
+        order: { retiredAt: 'DESC' },
+      });
+    });
   });
 });
