@@ -8,6 +8,7 @@ import { SensorsIngestionProcessor } from './sensors-ingestion.processor';
 import { SensorDevice } from './entities/sensor-device.entity';
 import { SensorReading } from './entities/sensor-reading.entity';
 import { ReadingBatch } from './entities/reading-batch.entity';
+import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { ReadingBatch } from './entities/reading-batch.entity';
     }),
   ],
   controllers: [SensorsController],
-  providers: [SensorsService, SensorsGateway, SensorsIngestionProcessor],
+  providers: [SensorsService, SensorsGateway, SensorsIngestionProcessor, ApiKeyGuard],
   exports: [SensorsService, TypeOrmModule],
 })
 export class SensorsModule {}

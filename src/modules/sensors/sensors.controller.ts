@@ -5,17 +5,17 @@ import {
   Param,
   Body,
   Query,
-  Headers,
   HttpCode,
   HttpStatus,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { SensorsService } from './sensors.service';
 import { CreateReadingDto } from './dto/create-reading.dto';
 import { QueryReadingsDto } from './dto/query-readings.dto';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { ApiKeyAuth } from '../../common/decorators/api-key-auth.decorator';
+import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SensorReading } from './entities/sensor-reading.entity';
 import { SensorDevice } from './entities/sensor-device.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
@@ -23,23 +23,22 @@ import { ThrottleSensor } from '../../common/decorators/throttle.decorator';
 
 @Controller('sensors')
 export class SensorsController {
-  constructor(
-    private readonly sensorsService: SensorsService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly sensorsService: SensorsService) {}
 
+  /**
+   * Ingest a sensor reading from a registered device.
+   *
+   * Authentication: per-device API key via X-API-Key header.
+   * The key is validated by ApiKeyGuard against the bcrypt hash stored on the
+   * SensorDevice entity.  JWT is not required (@Public bypasses JwtAuthGuard).
+   */
   @Post('readings')
   @Public()
+  @ApiKeyAuth()
+  @UseGuards(ApiKeyGuard)
   @ThrottleSensor()
   @HttpCode(HttpStatus.CREATED)
-  async ingestReading(
-    @Body() dto: CreateReadingDto,
-    @Headers('x-api-key') apiKey?: string,
-  ): Promise<SensorReading> {
-    const expectedKey = this.configService.get<string>('app.sensorApiKey');
-    if (expectedKey && apiKey !== expectedKey) {
-      throw new UnauthorizedException('Invalid API key');
-    }
+  async ingestReading(@Body() dto: CreateReadingDto): Promise<SensorReading> {
     return this.sensorsService.ingestReading(dto);
   }
 
