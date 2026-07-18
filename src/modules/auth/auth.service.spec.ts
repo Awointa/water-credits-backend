@@ -560,7 +560,8 @@ describe('AuthService', () => {
         user.id,
         expect.objectContaining({ refreshToken: expect.any(String) }),
       );
-      const storedHash = (userRepo.update.mock.calls[0] as [string, { refreshToken: string }])[1].refreshToken;
+      const storedHash = (userRepo.update.mock.calls[0] as [string, { refreshToken: string }])[1]
+        .refreshToken;
       expect(storedHash).not.toBe(token);
       expect(storedHash).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex digest
     });

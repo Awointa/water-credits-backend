@@ -120,7 +120,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
 
     const tokens = await this.generateTokens(user);
-    await this.userRepo.update(user.id, { refreshToken: this.hashRefreshToken(tokens.refreshToken) });
+    await this.userRepo.update(user.id, {
+      refreshToken: this.hashRefreshToken(tokens.refreshToken),
+    });
 
     const { refreshToken: _, ...safeUser } = user;
     return { ...tokens, user: safeUser };
@@ -175,7 +177,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     await this.userRepo.save(user);
 
     const tokens = await this.generateTokens(user);
-    await this.userRepo.update(user.id, { refreshToken: this.hashRefreshToken(tokens.refreshToken) });
+    await this.userRepo.update(user.id, {
+      refreshToken: this.hashRefreshToken(tokens.refreshToken),
+    });
 
     const { refreshToken: _, ...safeUser } = user;
     return { ...tokens, user: safeUser };
@@ -195,11 +199,17 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
         .where('user.id = :id', { id: payload.sub })
         .andWhere('user.isActive = :isActive', { isActive: true })
         .getOne();
-      if (!user || !user.refreshToken || user.refreshToken !== this.hashRefreshToken(refreshToken)) {
+      if (
+        !user ||
+        !user.refreshToken ||
+        user.refreshToken !== this.hashRefreshToken(refreshToken)
+      ) {
         throw new UnauthorizedException('Invalid refresh token');
       }
       const tokens = await this.generateTokens(user);
-      await this.userRepo.update(user.id, { refreshToken: this.hashRefreshToken(tokens.refreshToken) });
+      await this.userRepo.update(user.id, {
+        refreshToken: this.hashRefreshToken(tokens.refreshToken),
+      });
       return tokens;
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
