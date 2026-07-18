@@ -120,10 +120,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
 
     const tokens = await this.generateTokens(user);
-    user.refreshToken = tokens.refreshToken;
-    await this.userRepo.save(user);
+    await this.userRepo.update(user.id, { refreshToken: this.hashRefreshToken(tokens.refreshToken) });
 
-    return { ...tokens, user: { ...user } };
+    const { refreshToken: _, ...safeUser } = user;
+    return { ...tokens, user: safeUser };
   }
 
   // ── Register ──────────────────────────────────────────────────────────────
@@ -175,10 +175,10 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     await this.userRepo.save(user);
 
     const tokens = await this.generateTokens(user);
-    user.refreshToken = tokens.refreshToken;
-    await this.userRepo.save(user);
+    await this.userRepo.update(user.id, { refreshToken: this.hashRefreshToken(tokens.refreshToken) });
 
-    return { ...tokens, user: { ...user } };
+    const { refreshToken: _, ...safeUser } = user;
+    return { ...tokens, user: safeUser };
   }
 
   // ── Refresh ───────────────────────────────────────────────────────────────
@@ -187,15 +187,19 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     try {
       const secret = this.configService.get<string>('jwt.secret');
       const payload = this.jwtService.verify(refreshToken, { secret });
-      const user = await this.userRepo.findOne({
-        where: { id: payload.sub, isActive: true },
-      });
-      if (!user || user.refreshToken !== refreshToken) {
+      // Load user with refreshToken column (select: false on entity)
+      const user = await this.userRepo
+        .createQueryBuilder('user')
+        .select(['user.id', 'user.wallet', 'user.role'])
+        .addSelect('user.refreshToken')
+        .where('user.id = :id', { id: payload.sub })
+        .andWhere('user.isActive = :isActive', { isActive: true })
+        .getOne();
+      if (!user || !user.refreshToken || user.refreshToken !== this.hashRefreshToken(refreshToken)) {
         throw new UnauthorizedException('Invalid refresh token');
       }
       const tokens = await this.generateTokens(user);
-      user.refreshToken = tokens.refreshToken;
-      await this.userRepo.save(user);
+      await this.userRepo.update(user.id, { refreshToken: this.hashRefreshToken(tokens.refreshToken) });
       return tokens;
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -212,13 +216,37 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
 
   private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
     const payload = { sub: user.id, wallet: user.wallet, role: user.role };
-    const expiresIn = this.configService.get<string>('jwt.expiration') ?? '7d';
+    const accessExpiresIn = this.configService.get<string>('jwt.expiration') ?? '7d';
+    const refreshExpiresIn = this.configService.get<string>('jwt.refreshExpiration') ?? '30d';
     const secret = this.configService.get<string>('jwt.secret');
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, { expiresIn }),
-      this.jwtService.signAsync(payload, { expiresIn: '30d', secret }),
+      this.jwtService.signAsync(payload, { expiresIn: accessExpiresIn }),
+      this.jwtService.signAsync(payload, { expiresIn: refreshExpiresIn, secret }),
     ]);
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * Hash a refresh token using SHA-256 HMAC with the JWT secret.
+   *
+   * Why HMAC-SHA256 over bcrypt?
+   *   The refresh endpoint is the most frequently called auth endpoint after
+   *   initial login. bcrypt's adaptive cost (even at 10 rounds) adds tens of
+   *   milliseconds of latency per call — measurable at high concurrency.
+   *   SHA-256 HMAC completes in microseconds with equivalent security for this
+   *   use case, because:
+   *     - The HMAC key (JWT secret) is a high-entropy server-side secret.
+   *     - An attacker with DB read access cannot reverse the hash without the
+   *       key (unlike a password hash where the input is low-entropy).
+   *     - Token rotation on every refresh limits the window for any leaked
+   *       hash to a single refresh cycle.
+   *
+   * If the threat model shifts (e.g., the JWT secret is also compromised), a
+   * dedicated HMAC key should be introduced via a new env var.
+   */
+  private hashRefreshToken(token: string): string {
+    const secret = this.configService.get<string>('jwt.secret') ?? '';
+    return crypto.createHmac('sha256', secret).update(token).digest('hex');
   }
 }

@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Keypair } from '@stellar/stellar-sdk';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { User, UserRole } from '../users/entities/user.entity';
 
@@ -48,6 +49,23 @@ jest.mock('ioredis', () => {
   return RedisCtor;
 });
 
+// Reusable query builder mock (reset per-test via beforeEach).
+function mockQueryBuilder() {
+  return {
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getOne: jest.fn(),
+  };
+}
+
+// SHA-256 HMAC helper matching the service's hashRefreshToken.
+function hashToken(token: string): string {
+  const secret = 'test-secret-at-least-32-chars-long';
+  return crypto.createHmac('sha256', secret).update(token).digest('hex');
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeUser(overrides: Partial<User> = {}): User {
@@ -72,6 +90,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let userRepo: {
     findOne: jest.Mock;
+    createQueryBuilder: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
     update: jest.Mock;
@@ -100,6 +119,7 @@ describe('AuthService', () => {
 
     userRepo = {
       findOne: jest.fn().mockResolvedValue(null),
+      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder()),
       create: jest.fn(),
       save: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
@@ -517,17 +537,32 @@ describe('AuthService', () => {
   // ── refresh ──────────────────────────────────────────────────────────────
 
   describe('refresh', () => {
-    it('returns new tokens when the refresh token is valid and matches the stored token', async () => {
-      const user = makeUser({ refreshToken: 'valid-refresh-token' });
+    let qb: ReturnType<typeof mockQueryBuilder>;
+
+    beforeEach(() => {
+      qb = mockQueryBuilder();
+      userRepo.createQueryBuilder.mockReturnValue(qb);
+    });
+
+    it('returns new tokens when the refresh token is valid and the hash matches', async () => {
+      const token = 'valid-refresh-token';
+      const user = makeUser({ refreshToken: hashToken(token) });
 
       jwtService.verify.mockReturnValue({ sub: user.id });
-      userRepo.findOne.mockResolvedValue(user);
-      userRepo.save.mockResolvedValue(user);
+      qb.getOne.mockResolvedValue(user);
 
-      const result = await service.refresh('valid-refresh-token');
+      const result = await service.refresh(token);
 
       expect(result.accessToken).toBe('signed-jwt-token');
       expect(result.refreshToken).toBe('signed-jwt-token');
+      // Verify the new refresh token is also hashed when stored
+      expect(userRepo.update).toHaveBeenCalledWith(
+        user.id,
+        expect.objectContaining({ refreshToken: expect.any(String) }),
+      );
+      const storedHash = (userRepo.update.mock.calls[0] as [string, { refreshToken: string }])[1].refreshToken;
+      expect(storedHash).not.toBe(token);
+      expect(storedHash).toMatch(/^[0-9a-f]{64}$/); // SHA-256 hex digest
     });
 
     it('throws UnauthorizedException when jwtService.verify throws (expired or invalid token)', async () => {
@@ -540,17 +575,25 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException when user is not found for the token sub', async () => {
       jwtService.verify.mockReturnValue({ sub: 'nonexistent-user-id' });
-      userRepo.findOne.mockResolvedValue(null);
+      qb.getOne.mockResolvedValue(null);
 
       await expect(service.refresh('some-token')).rejects.toThrow(UnauthorizedException);
     });
 
-    it('throws UnauthorizedException when the stored refreshToken does not match', async () => {
-      const user = makeUser({ refreshToken: 'stored-token' });
+    it('throws UnauthorizedException when the stored refreshToken does not match (tampered token)', async () => {
+      const user = makeUser({ refreshToken: hashToken('real-token') });
       jwtService.verify.mockReturnValue({ sub: user.id });
-      userRepo.findOne.mockResolvedValue(user);
+      qb.getOne.mockResolvedValue(user);
 
       await expect(service.refresh('different-token')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('throws UnauthorizedException when the stored refreshToken is null (after migration or logout)', async () => {
+      const user = makeUser({ refreshToken: null });
+      jwtService.verify.mockReturnValue({ sub: user.id });
+      qb.getOne.mockResolvedValue(user);
+
+      await expect(service.refresh('some-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 
