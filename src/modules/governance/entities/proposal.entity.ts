@@ -48,6 +48,26 @@ export class Proposal {
   @Column({ type: 'timestamptz' })
   deadline: Date;
 
+  /**
+   * Numeric identifier used by the on-chain Soroban governance contract.
+   * Populated after the proposal is executed on-chain (u32 from the contract).
+   * NULL until execution is confirmed.
+   */
+  @Column({ name: 'on_chain_proposal_id', type: 'int', nullable: true })
+  onChainProposalId: number | null;
+
+  /** Stellar transaction hash from the on-chain execute() call. */
+  @Column({ name: 'execution_tx_hash', type: 'varchar', length: 100, nullable: true })
+  executionTxHash: string | null;
+
+  /** Wallet address of the admin who triggered executeProposal(). */
+  @Column({ name: 'executed_by', type: 'varchar', length: 56, nullable: true })
+  executedBy: string | null;
+
+  /** Timestamp at which execution was confirmed on-chain. */
+  @Column({ name: 'executed_at', type: 'timestamptz', nullable: true })
+  executedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
