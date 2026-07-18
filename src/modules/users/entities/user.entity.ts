@@ -39,7 +39,11 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
-  @Column({ name: 'refresh_token', type: 'text', nullable: true })
+  @Column({ name: 'refresh_token', type: 'text', nullable: true, select: false })
+  /**
+   * Stores SHA-256 HMAC of the refresh token (never the raw JWT).
+   * Load explicitly with addSelect('user.refreshToken').
+   */
   refreshToken: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
