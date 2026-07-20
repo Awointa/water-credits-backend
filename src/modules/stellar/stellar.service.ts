@@ -148,6 +148,43 @@ export class StellarService {
     ]);
   }
 
+  /**
+   * Same as retireCredits() but returns the txHash alongside the polled
+   * response so callers (e.g. the retirement processor) can persist the
+   * hash immediately.
+   */
+  async retireCreditsWithHash(
+    tokenId: string,
+    amount: BigNumber,
+    purpose: string,
+    metadataUri: string,
+  ): Promise<{ txHash: string; response: SorobanRpc.Api.GetTransactionResponse }> {
+    const keypair = this.stellarClient.getKeypair();
+    const network = await this.getNetwork();
+    const account = await this.buildAccount(keypair);
+
+    const contract = new Contract(tokenId);
+    let tx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: network.passphrase,
+    })
+      .addOperation(
+        contract.call(
+          'retire',
+          nativeToScVal(amount.toFixed(0), { type: 'i128' }),
+          nativeToScVal(purpose, { type: 'string' }),
+          nativeToScVal(metadataUri, { type: 'string' }),
+        ),
+      )
+      .setTimeout(30)
+      .build();
+
+    tx = await this.stellarClient.prepareTx(tx);
+    tx.sign(keypair);
+
+    return this.stellarClient.sendTxWithHash(tx);
+  }
+
   // ── Factory / Project Registry ──
 
   async registerProject(

@@ -5,6 +5,7 @@ import { CreditsController } from './credits.controller';
 import { CreditsService } from './credits.service';
 import { CreditsRetirementProcessor } from './credits-retirement.processor';
 import { Retirement } from './entities/retirement.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { Retirement } from './entities/retirement.entity';
         removeOnComplete: 100,
       },
     }),
+    NotificationsModule,
   ],
   controllers: [CreditsController],
   providers: [CreditsService, CreditsRetirementProcessor],
