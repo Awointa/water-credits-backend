@@ -9,12 +9,22 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { verifyWsToken } from '../../common/websockets/ws-jwt.util';
+import { ProjectsService } from '../projects/projects.service';
+import { UserRole } from '../users/entities/user.entity';
 
 const PROJECT_PREFIX = 'project:';
 
+// Roles that may observe any project's sensor stream regardless of ownership.
+const PRIVILEGED_ROLES = new Set<string>([UserRole.ADMIN, UserRole.VERIFIER, UserRole.ORACLE]);
+
 @WebSocketGateway({
   namespace: '/sensors',
-  cors: { origin: '*', credentials: true },
+  cors: {
+    origin: process.env.NODE_ENV === 'production' ? process.env.CORS_ORIGIN : '*',
+    credentials: true,
+  },
 })
 export class SensorsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(SensorsGateway.name);
@@ -22,8 +32,21 @@ export class SensorsGateway implements OnGatewayConnection, OnGatewayDisconnect 
   @WebSocketServer()
   server: Server;
 
-  handleConnection(client: Socket): void {
-    this.logger.log(`Client connected: ${client.id}`);
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly projectsService: ProjectsService,
+  ) {}
+
+  async handleConnection(client: Socket): Promise<void> {
+    const payload = await verifyWsToken(client, this.jwtService, this.logger);
+    if (!payload) {
+      client.disconnect(true);
+      return;
+    }
+
+    client.data.userId = payload.sub;
+    client.data.role = payload.role;
+    this.logger.log(`Client connected: ${client.id} (User: ${payload.sub})`);
   }
 
   handleDisconnect(client: Socket): void {
@@ -35,10 +58,19 @@ export class SensorsGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   @SubscribeMessage('subscribe:project')
-  handleSubscribeProject(
+  async handleSubscribeProject(
     @ConnectedSocket() client: Socket,
     @MessageBody() projectId: string,
-  ): void {
+  ): Promise<void> {
+    const allowed = await this.canAccessProject(client, projectId);
+    if (!allowed) {
+      client.emit('error', { message: 'Forbidden: no access to this project' });
+      this.logger.warn(
+        `Client ${client.id} (user ${client.data.userId}) denied subscription to project ${projectId}`,
+      );
+      return;
+    }
+
     const room = `${PROJECT_PREFIX}${projectId}`;
     client.join(room);
     this.logger.log(`Client ${client.id} subscribed to project ${projectId}`);
@@ -60,5 +92,25 @@ export class SensorsGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   emitAlert(projectId: string, alert: Record<string, unknown>): void {
     this.server.to(`${PROJECT_PREFIX}${projectId}`).emit('sensor:alert', alert);
+  }
+
+  // Project owners always have access; admins/verifiers/oracles may observe
+  // any project. Everyone else is denied.
+  private async canAccessProject(client: Socket, projectId: string): Promise<boolean> {
+    const userId = client.data.userId as string | undefined;
+    const role = client.data.role as string | undefined;
+    if (!userId) {
+      return false;
+    }
+    if (role && PRIVILEGED_ROLES.has(role)) {
+      return true;
+    }
+
+    try {
+      const project = await this.projectsService.findById(projectId);
+      return project.ownerId === userId;
+    } catch {
+      return false;
+    }
   }
 }

@@ -9,10 +9,14 @@ import { SensorDevice } from './entities/sensor-device.entity';
 import { SensorReading } from './entities/sensor-reading.entity';
 import { ReadingBatch } from './entities/reading-batch.entity';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
+import { AuthModule } from '../auth/auth.module';
+import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([SensorDevice, SensorReading, ReadingBatch]),
+    AuthModule,
+    ProjectsModule,
     BullModule.registerQueue({
       name: 'sensor-ingestion',
       defaultJobOptions: {

@@ -7,11 +7,13 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { verifyWsToken } from '../../common/websockets/ws-jwt.util';
 
 @WebSocketGateway({
   namespace: 'notifications',
   cors: {
-    origin: '*',
+    origin: process.env.NODE_ENV === 'production' ? process.env.CORS_ORIGIN : '*',
   },
 })
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -23,22 +25,29 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   // Map of userId to Socket IDs
   private userSockets: Map<string, string[]> = new Map();
 
+  constructor(private readonly jwtService: JwtService) {}
+
   async handleConnection(client: Socket) {
-    // In a real app, extract userId from JWT in the handshake
-    const userId = client.handshake.query.userId as string;
-    if (userId) {
-      const sockets = this.userSockets.get(userId) || [];
-      sockets.push(client.id);
-      this.userSockets.set(userId, sockets);
-      this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
-      client.join(`user:${userId}`);
-    } else {
-      this.logger.log(`Client connected: ${client.id} (Anonymous)`);
+    const payload = await verifyWsToken(client, this.jwtService, this.logger);
+    if (!payload) {
+      client.disconnect(true);
+      return;
     }
+
+    // userId is derived solely from the verified JWT `sub` claim — never from
+    // client-supplied query params, which previously allowed impersonation.
+    const userId = payload.sub;
+    client.data.userId = userId;
+
+    const sockets = this.userSockets.get(userId) || [];
+    sockets.push(client.id);
+    this.userSockets.set(userId, sockets);
+    this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
+    client.join(`user:${userId}`);
   }
 
   handleDisconnect(client: Socket) {
-    const userId = client.handshake.query.userId as string;
+    const userId = client.data.userId as string | undefined;
     if (userId) {
       const sockets = this.userSockets.get(userId) || [];
       const index = sockets.indexOf(client.id);
