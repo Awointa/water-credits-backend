@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { OracleService, AggregatedReading } from './oracle.service';
 import { OracleSubmission, SubmissionStatus } from './entities/oracle-submission.entity';
+import { StellarService } from '../stellar/stellar.service';
 
 // ── Typed mock factory ────────────────────────────────────────────────────────
 
@@ -23,7 +24,16 @@ function makeQueryRunner(): QueryRunnerMock {
   return {
     connect: jest.fn().mockResolvedValue(undefined),
     startTransaction: jest.fn().mockResolvedValue(undefined),
-    query: jest.fn().mockResolvedValue([{ max_nonce: null }]),
+    query: jest.fn().mockImplementation(async (sql: string, _params?: unknown[]) => {
+      // Return void for advisory lock, nonce result for MAX query.
+      if (sql.includes('pg_advisory_xact_lock')) {
+        return [];
+      }
+      if (sql.includes('SELECT MAX')) {
+        return [{ max_nonce: null }];
+      }
+      return [];
+    }),
     manager: {
       create: jest.fn().mockImplementation((_Entity: unknown, data: unknown) => data),
       save: jest
@@ -65,6 +75,23 @@ function makeSubmissionRepo(): SubmissionRepoMock {
   };
 }
 
+function makeSubmission(overrides: Partial<OracleSubmission> = {}): OracleSubmission {
+  return {
+    id: 'sub-1',
+    projectId: 'proj-1',
+    oracleAddress: 'GABC123',
+    nonce: 1,
+    txHash: '',
+    status: SubmissionStatus.CONFIRMED,
+    readingsSnapshot: { dissolvedOxygen: 6.8 },
+    result: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    project: undefined as never,
+    ...overrides,
+  };
+}
+
 // ── Test suite ────────────────────────────────────────────────────────────────
 
 describe('OracleService', () => {
@@ -73,12 +100,14 @@ describe('OracleService', () => {
   let submissionRepo: SubmissionRepoMock;
   let oracleQueue: { add: jest.Mock };
   let dataSource: { createQueryRunner: jest.Mock };
+  let stellarService: { getOracleNonce: jest.Mock; submitReading: jest.Mock };
 
   beforeEach(async () => {
     queryRunner = makeQueryRunner();
     submissionRepo = makeSubmissionRepo();
     oracleQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
     dataSource = { createQueryRunner: jest.fn().mockReturnValue(queryRunner) };
+    stellarService = { getOracleNonce: jest.fn(), submitReading: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -87,6 +116,7 @@ describe('OracleService', () => {
         { provide: getQueueToken('oracle-submit'), useValue: oracleQueue },
         { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: DataSource, useValue: dataSource },
+        { provide: StellarService, useValue: stellarService },
       ],
     }).compile();
 
@@ -553,6 +583,70 @@ describe('OracleService', () => {
 
       expect(result.startTime).toEqual(t1);
       expect(result.endTime).toEqual(t2);
+    });
+  });
+
+  // ── Nonce-gap detection ─────────────────────────────────────────────────
+
+  describe('detectNonceDrift', () => {
+    it('logs no warning when local and on-chain nonces match', async () => {
+      submissionRepo.findOne.mockResolvedValue(makeSubmission({ nonce: 5 }) as never);
+      stellarService.getOracleNonce.mockResolvedValue(5);
+
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+
+      await service.detectNonceDrift('contract-id', 'GABC');
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('logs a warning when local and on-chain nonces diverge by more than 1', async () => {
+      submissionRepo.findOne.mockResolvedValue(makeSubmission({ nonce: 3 }) as never);
+      stellarService.getOracleNonce.mockResolvedValue(10);
+
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+
+      await service.detectNonceDrift('contract-id', 'GABC');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Nonce drift detected'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('logs a warning and returns early when stellar call fails', async () => {
+      submissionRepo.findOne.mockResolvedValue(makeSubmission({ nonce: 3 }) as never);
+      stellarService.getOracleNonce.mockRejectedValue(new Error('network error'));
+
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+
+      await service.detectNonceDrift('contract-id', 'GABC');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('could not read on-chain nonce'),
+      );
+
+      warnSpy.mockRestore();
+    });
+  });
+
+  // ── findStaleSubmissions ─────────────────────────────────────────────────
+
+  describe('findStaleSubmissions', () => {
+    it('returns submissions beyond on-chain nonce', async () => {
+      stellarService.getOracleNonce.mockResolvedValue(5);
+      submissionRepo.find.mockResolvedValue([
+        makeSubmission({ nonce: 7 }),
+        makeSubmission({ nonce: 6 }),
+      ] as never);
+
+      const result = await service.findStaleSubmissions('contract-id', 'GABC');
+      expect(result).toHaveLength(2);
+    });
+
+    it('returns empty array when stellar call fails', async () => {
+      stellarService.getOracleNonce.mockRejectedValue(new Error('network error'));
+
+      const result = await service.findStaleSubmissions('contract-id', 'GABC');
+      expect(result).toEqual([]);
     });
   });
 });

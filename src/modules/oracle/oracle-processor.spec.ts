@@ -104,15 +104,32 @@ describe('OracleProcessor', () => {
 
   // ── terminal idempotency guard ────────────────────────────────────────────
 
-  it.each([SubmissionStatus.CONFIRMED, SubmissionStatus.FAILED])(
-    'skips without re-submitting when already in terminal state %s',
-    async (terminalStatus) => {
-      findOneMock.mockResolvedValue(makeSubmission({ status: terminalStatus }));
+  it('skips without re-submitting when already CONFIRMED', async () => {
+    findOneMock.mockResolvedValue(makeSubmission({ status: SubmissionStatus.CONFIRMED }));
 
-      await expect(processor.processSubmission(makeJob())).resolves.toBeUndefined();
-      expect(submitReadingMock).not.toHaveBeenCalled();
-    },
-  );
+    await expect(processor.processSubmission(makeJob())).resolves.toBeUndefined();
+    expect(submitReadingMock).not.toHaveBeenCalled();
+  });
+
+  it('re-tries FAILED submissions with the same nonce', async () => {
+    findOneMock.mockResolvedValue(makeSubmission({ status: SubmissionStatus.FAILED }));
+    submitReadingMock.mockResolvedValue({
+      txHash: 'retry-tx-hash',
+      response: SUCCESS_RESPONSE,
+    });
+
+    await processor.processSubmission(makeJob({ nonce: 3 }));
+
+    expect(submitReadingMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(Object),
+      3,
+    );
+    expect(savedSnapshots).toHaveLength(2);
+    expect(savedSnapshots[0].status).toBe(SubmissionStatus.SUBMITTED);
+    expect(savedSnapshots[1].status).toBe(SubmissionStatus.CONFIRMED);
+  });
 
   // ── oracle contract not configured ───────────────────────────────────────
 
