@@ -201,6 +201,18 @@ export class StellarService {
     return this.stellarClient.sendTxWithHash(tx);
   }
 
+  /**
+   * Reads the current on-chain nonce for a given oracle address from the
+   * Soroban oracle contract.  This is a read-only call; it does not create
+   * a ledger entry.
+   */
+  async getOracleNonce(oracleContractId: string, oracleAddress: string): Promise<number> {
+    const result = await this.callReadOnly(oracleContractId, 'oracle_nonce', [
+      new Address(oracleAddress).toScVal(),
+    ]);
+    return Number(result ?? 0);
+  }
+
   async addOracle(oracleContractId: string, oracleAddress: string): Promise<unknown> {
     return this.invokeContract(oracleContractId, 'add_oracle', [
       new Address(oracleAddress).toScVal(),

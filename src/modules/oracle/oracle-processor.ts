@@ -65,15 +65,11 @@ export class OracleProcessor {
       return;
     }
 
-    // Idempotency guard: if a previous attempt already reached CONFIRMED or
-    // FAILED, do not re-submit to the network.
-    if (
-      submission.status === SubmissionStatus.CONFIRMED ||
-      submission.status === SubmissionStatus.FAILED
-    ) {
-      this.logger.warn(
-        `Submission ${submissionId} is already in terminal state ${submission.status}, skipping`,
-      );
+    // Idempotency guard: if a previous attempt already reached CONFIRMED,
+    // do not re-submit to the network.  FAILED submissions are re-tried
+    // with the **same** nonce so the counter is not advanced on failure.
+    if (submission.status === SubmissionStatus.CONFIRMED) {
+      this.logger.warn(`Submission ${submissionId} is already CONFIRMED, skipping`);
       return;
     }
 

@@ -2,11 +2,12 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { Repository, Between, DataSource } from 'typeorm';
+import { Repository, Between, DataSource, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { OracleSubmission, SubmissionStatus } from './entities/oracle-submission.entity';
 import { OracleQueryDto } from './dto/oracle-query.dto';
 import { TriggerSubmissionDto } from './dto/trigger-submission.dto';
+import { StellarService } from '../stellar/stellar.service';
 
 export interface AggregatedReading {
   medianPh: number | null;
@@ -32,6 +33,7 @@ export class OracleService {
     private readonly oracleQueue: Queue,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly stellarService: StellarService,
   ) {}
 
   async getStatus(): Promise<{
@@ -96,8 +98,14 @@ export class OracleService {
 
     let saved: OracleSubmission;
     try {
-      // Acquire a row-level lock on the latest nonce for this oracle address so
-      // that concurrent callers are serialised and cannot read the same value.
+      // PostgreSQL advisory lock keyed on a hash of the oracle address.
+      // This serialises concurrent callers even when no rows exist yet for
+      // that oracle (which the FOR UPDATE on MAX(nonce) below cannot lock).
+      await queryRunner.query(
+        `SELECT pg_advisory_xact_lock(hashtext('oracle_nonce'), hashtext($1))`,
+        [dto.oracleAddress],
+      );
+
       const [row]: [{ max_nonce: string | null }] = await queryRunner.query(
         `SELECT MAX(nonce) AS max_nonce
            FROM oracle_submissions
@@ -206,6 +214,62 @@ export class OracleService {
       startTime: submissions[0]?.createdAt ?? new Date(),
       endTime: submissions[submissions.length - 1]?.createdAt ?? new Date(),
     };
+  }
+
+  // ── Nonce-gap detection ─────────────────────────────────────────────────
+
+  /**
+   * Logs a warning when the local max confirmed nonce diverges from the
+   * on-chain oracle nonce by more than 1 (indicating a missed or desynced
+   * submission).
+   */
+  async detectNonceDrift(oracleContractId: string, oracleAddress: string): Promise<void> {
+    const localMax = await this.submissionRepo.findOne({
+      where: { oracleAddress, status: SubmissionStatus.CONFIRMED },
+      order: { nonce: 'DESC' },
+    });
+    const localNonce = localMax?.nonce ?? 0;
+
+    let onChainNonce: number;
+    try {
+      onChainNonce = await this.stellarService.getOracleNonce(oracleContractId, oracleAddress);
+    } catch {
+      this.logger.warn(`detectNonceDrift: could not read on-chain nonce for ${oracleAddress}`);
+      return;
+    }
+
+    const diff = onChainNonce - localNonce;
+    if (Math.abs(diff) > 1) {
+      this.logger.warn(
+        `Nonce drift detected for oracle ${oracleAddress}: ` +
+          `local=${localNonce} on-chain=${onChainNonce} diff=${diff}`,
+      );
+    }
+  }
+
+  /**
+   * Finds confirmed submissions whose nonce is greater than the given
+   * on-chain nonce (stale / likely invalid on chain).
+   */
+  async findStaleSubmissions(
+    oracleContractId: string,
+    oracleAddress: string,
+  ): Promise<OracleSubmission[]> {
+    let onChainNonce: number;
+    try {
+      onChainNonce = await this.stellarService.getOracleNonce(oracleContractId, oracleAddress);
+    } catch {
+      return [];
+    }
+
+    return this.submissionRepo.find({
+      where: {
+        oracleAddress,
+        status: SubmissionStatus.CONFIRMED,
+        nonce: MoreThan(onChainNonce),
+      },
+      order: { nonce: 'ASC' },
+    });
   }
 
   private median(values: number[]): number | null {
