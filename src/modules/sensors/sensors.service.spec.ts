@@ -765,3 +765,243 @@ describe('SensorsService — registerDevice', () => {
     await expect(service.getDeviceById('nonexistent')).rejects.toThrow(NotFoundException);
   });
 });
+
+// ── Additional describe blocks ────────────────────────────────────────────
+
+describe('SensorsService — getReadings', () => {
+  let service: SensorsService;
+  let readingRepo: MockRepo;
+  let deviceRepo: MockRepo;
+  let batchRepo: MockRepo;
+
+  function makeQb() {
+    return {
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
+  }
+
+  beforeEach(async () => {
+    deviceRepo = makeMockRepo();
+    readingRepo = makeMockRepo();
+    batchRepo = makeMockRepo();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SensorsService,
+        { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
+        { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
+        { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+      ],
+    }).compile();
+
+    service = module.get<SensorsService>(SensorsService);
+  });
+
+  it('returns paginated readings with no filters', async () => {
+    const qb = makeQb();
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    const result = await service.getReadings({ skip: 0, limit: 20, page: 1 } as never);
+
+    expect(qb.getManyAndCount).toHaveBeenCalled();
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(20);
+  });
+
+  it('filters by deviceId when provided', async () => {
+    const qb = makeQb();
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.getReadings({ deviceId: 'dev-001', skip: 0, limit: 20, page: 1 } as never);
+
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('device_id'),
+      expect.any(Object),
+    );
+  });
+
+  it('filters by projectId when provided', async () => {
+    const qb = makeQb();
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.getReadings({ projectId: 'proj-1', skip: 0, limit: 20, page: 1 } as never);
+
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('project_id'),
+      expect.any(Object),
+    );
+  });
+
+  it('filters by startDate and endDate when provided', async () => {
+    const qb = makeQb();
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.getReadings({
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      skip: 0,
+      limit: 20,
+      page: 1,
+    } as never);
+
+    expect(qb.andWhere).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SensorsService — getAggregatedSummary', () => {
+  let service: SensorsService;
+  let readingRepo: MockRepo;
+  let deviceRepo: MockRepo;
+  let batchRepo: MockRepo;
+
+  beforeEach(async () => {
+    deviceRepo = makeMockRepo();
+    readingRepo = makeMockRepo();
+    batchRepo = makeMockRepo();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SensorsService,
+        { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
+        { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
+        { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+      ],
+    }).compile();
+
+    service = module.get<SensorsService>(SensorsService);
+  });
+
+  it('returns aggregated values from query result', async () => {
+    const qb = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        avgPh: '7.2',
+        avgTurbidity: '11.5',
+        avgDissolvedOxygen: '8.0',
+        avgFlowRate: '1.5',
+        avgNitrogen: '2.5',
+        avgPhosphorus: '0.15',
+        avgTemperature: '19.0',
+        totalReadings: '42',
+      }),
+    };
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    const result = await service.getAggregatedSummary('proj-1');
+
+    expect(result.avgPh).toBeCloseTo(7.2);
+    expect(result.totalReadings).toBe(42);
+  });
+
+  it('returns null for all averages when result is null', async () => {
+    const qb = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue(null),
+    };
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    const result = await service.getAggregatedSummary('proj-1');
+
+    expect(result.avgPh).toBeNull();
+    expect(result.totalReadings).toBe(0);
+  });
+
+  it('filters by startDate and endDate when provided', async () => {
+    const qb = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue(null),
+    };
+    readingRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.getAggregatedSummary('proj-1', '2026-01-01', '2026-12-31');
+
+    expect(qb.andWhere).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SensorsService — validateParameters unknown key', () => {
+  let service: SensorsService;
+  let deviceRepo: MockRepo;
+  let readingRepo: MockRepo;
+  let batchRepo: MockRepo;
+  let testKeypair: Keypair;
+
+  beforeAll(() => {
+    testKeypair = Keypair.random();
+  });
+
+  beforeEach(async () => {
+    deviceRepo = makeMockRepo();
+    readingRepo = makeMockRepo();
+    batchRepo = makeMockRepo();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SensorsService,
+        { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
+        { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
+        { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+      ],
+    }).compile();
+
+    service = module.get<SensorsService>(SensorsService);
+  });
+
+  it('skips validation for unknown parameter keys (not in PARAMETER_RANGES)', async () => {
+    const device = {
+      id: 'device-uuid-1',
+      deviceId: 'dev-001',
+      projectId: 'proj-1',
+      publicKey: testKeypair.publicKey(),
+    } as SensorDevice;
+    deviceRepo.findOne.mockResolvedValue(device);
+
+    const payload = buildPayload('dev-001', '2026-01-01T00:00:00.000Z', {
+      ph: 7.0,
+      turbidity: null,
+      dissolvedOxygen: null,
+      flowRate: null,
+      nitrogen: null,
+      phosphorus: null,
+      temperature: null,
+    });
+    const signature = signPayload(testKeypair, payload);
+
+    const batch = {
+      id: 'batch-1',
+      projectId: 'proj-1',
+      status: BatchStatus.PENDING,
+      createdAt: new Date(),
+    };
+    batchRepo.findOne.mockResolvedValue(batch);
+    readingRepo.create.mockImplementation((d) => d as SensorReading);
+    readingRepo.save.mockImplementation((r) =>
+      Promise.resolve({ ...r, id: 'r-1' } as SensorReading),
+    );
+    deviceRepo.update.mockResolvedValue(undefined);
+    batchRepo.increment.mockResolvedValue(undefined);
+
+    const result = await service.ingestReading({
+      deviceId: 'dev-001',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      ph: 7.0,
+      someUnknownParam: 999 as never,
+      signature,
+    } as CreateReadingDto);
+
+    expect(result).toBeDefined();
+  });
+});

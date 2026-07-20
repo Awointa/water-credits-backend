@@ -592,5 +592,353 @@ describe('GovernanceService', () => {
         InternalServerErrorException,
       );
     });
+
+    it('throws InternalServerErrorException when proposal is not found after execution update', async () => {
+      const oldDeadline = new Date(Date.now() - 2 * 86_400_000);
+      const proposal = makeProposal({
+        status: ProposalStatus.PASSED,
+        deadline: oldDeadline,
+        onChainProposalId: 7,
+      });
+
+      proposalRepo.findOne
+        .mockResolvedValueOnce(proposal) // getProposalById
+        .mockResolvedValueOnce(null); // reload after update → null
+
+      configRepo.findOne.mockResolvedValue(makeConfig({ timelockPeriod: 86400 }));
+
+      const execQb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue(undefined),
+      };
+      proposalRepo.createQueryBuilder.mockReturnValue(execQb);
+
+      stellarService.execute.mockResolvedValue({ txHash: 'abc' });
+
+      await expect(service.executeProposal(proposal.id, 'GADMIN')).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
+  // ── getConfig ── no existing config ──────────────────────────────────────
+
+  describe('getConfig — default creation', () => {
+    it('creates and returns a default config when none exists', async () => {
+      configRepo.findOne.mockResolvedValue(null);
+      const defaultConfig = makeConfig();
+      configRepo.create.mockReturnValue(defaultConfig);
+      configRepo.save.mockResolvedValue(defaultConfig);
+
+      const result = await service.getConfig();
+
+      expect(configRepo.create).toHaveBeenCalled();
+      expect(configRepo.save).toHaveBeenCalled();
+      expect(result).toEqual(defaultConfig);
+    });
+  });
+
+  // ── getConfig ── no existing config ──────────────────────────────────────
+
+  describe('getConfig — default creation', () => {
+    let proposalRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let voteRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let configRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let dataSource: { createQueryRunner: jest.Mock };
+    let stellarService: { execute: jest.Mock };
+    let configService: { get: jest.Mock };
+    let service: GovernanceService;
+
+    beforeEach(async () => {
+      proposalRepo = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+        createQueryBuilder: jest.fn(),
+      } as never;
+      voteRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
+      configRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
+      dataSource = { createQueryRunner: jest.fn() };
+      stellarService = { execute: jest.fn() };
+      configService = { get: jest.fn() };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          GovernanceService,
+          { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
+          { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
+          { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
+          { provide: ConfigService, useValue: configService },
+          { provide: DataSource, useValue: dataSource },
+          { provide: StellarService, useValue: stellarService },
+        ],
+      }).compile();
+
+      service = module.get<GovernanceService>(GovernanceService);
+    });
+
+    it('creates and returns a default config when none exists', async () => {
+      configRepo.findOne.mockResolvedValue(null);
+      const defaultConfig = makeConfig();
+      configRepo.create.mockReturnValue(defaultConfig);
+      configRepo.save.mockResolvedValue(defaultConfig);
+
+      const result = await service.getConfig();
+
+      expect(configRepo.create).toHaveBeenCalled();
+      expect(configRepo.save).toHaveBeenCalled();
+      expect(result).toEqual(defaultConfig);
+    });
+  });
+
+  // ── updateConfig ─────────────────────────────────────────────────────────
+
+  describe('updateConfig', () => {
+    let proposalRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let voteRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let configRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let dataSource: { createQueryRunner: jest.Mock };
+    let stellarService: { execute: jest.Mock };
+    let configService: { get: jest.Mock };
+    let service: GovernanceService;
+
+    beforeEach(async () => {
+      proposalRepo = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+        createQueryBuilder: jest.fn(),
+      } as never;
+      voteRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
+      configRepo = {
+        findOne: jest.fn().mockResolvedValue(makeConfig()),
+        create: jest.fn(),
+        save: jest.fn(),
+      } as never;
+      dataSource = { createQueryRunner: jest.fn() };
+      stellarService = { execute: jest.fn() };
+      configService = { get: jest.fn() };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          GovernanceService,
+          { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
+          { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
+          { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
+          { provide: ConfigService, useValue: configService },
+          { provide: DataSource, useValue: dataSource },
+          { provide: StellarService, useValue: stellarService },
+        ],
+      }).compile();
+
+      service = module.get<GovernanceService>(GovernanceService);
+    });
+
+    it('merges provided updates into the existing config and saves', async () => {
+      configRepo.findOne.mockResolvedValue(makeConfig({ quorum: 3 }));
+      configRepo.save.mockResolvedValue(makeConfig({ quorum: 5 }));
+
+      const result = await service.updateConfig({ quorum: 5 });
+
+      expect(configRepo.save).toHaveBeenCalled();
+      expect(result.quorum).toBe(5);
+    });
+  });
+
+  // ── getProposals with filters ────────────────────────────────────────────
+
+  describe('getProposals — filters', () => {
+    let proposalRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let voteRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let configRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let dataSource: { createQueryRunner: jest.Mock };
+    let stellarService: { execute: jest.Mock };
+    let configService: { get: jest.Mock };
+    let service: GovernanceService;
+
+    beforeEach(async () => {
+      proposalRepo = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+        createQueryBuilder: jest.fn(),
+      } as never;
+      voteRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
+      configRepo = {
+        findOne: jest.fn().mockResolvedValue(makeConfig()),
+        create: jest.fn(),
+        save: jest.fn(),
+      } as never;
+      dataSource = { createQueryRunner: jest.fn() };
+      stellarService = { execute: jest.fn() };
+      configService = { get: jest.fn() };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          GovernanceService,
+          { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
+          { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
+          { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
+          { provide: ConfigService, useValue: configService },
+          { provide: DataSource, useValue: dataSource },
+          { provide: StellarService, useValue: stellarService },
+        ],
+      }).compile();
+
+      service = module.get<GovernanceService>(GovernanceService);
+    });
+
+    it('filters by proposer when provided', async () => {
+      const qb = {
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+      proposalRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getProposals({ proposer: 'GABC', page: 1, limit: 20 } as never);
+
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('proposer'),
+        expect.objectContaining({ proposer: 'GABC' }),
+      );
+    });
+  });
+
+  // ── createProposal ──────────────────────────────────────────────────────
+
+  describe('createProposal', () => {
+    let proposalRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let voteRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let configRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let dataSource: { createQueryRunner: jest.Mock };
+    let stellarService: { execute: jest.Mock };
+    let configService: { get: jest.Mock };
+    let service: GovernanceService;
+
+    beforeEach(async () => {
+      proposalRepo = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+        createQueryBuilder: jest.fn(),
+      } as never;
+      voteRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
+      configRepo = {
+        findOne: jest.fn().mockResolvedValue(makeConfig()),
+        create: jest.fn(),
+        save: jest.fn(),
+      } as never;
+      dataSource = { createQueryRunner: jest.fn() };
+      stellarService = { execute: jest.fn() };
+      configService = { get: jest.fn() };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          GovernanceService,
+          { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
+          { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
+          { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
+          { provide: ConfigService, useValue: configService },
+          { provide: DataSource, useValue: dataSource },
+          { provide: StellarService, useValue: stellarService },
+        ],
+      }).compile();
+
+      service = module.get<GovernanceService>(GovernanceService);
+    });
+
+    it('creates a proposal with the correct fields', async () => {
+      configRepo.findOne.mockResolvedValue(makeConfig({ votingPeriod: 3600 }));
+      proposalRepo.create.mockReturnValue(makeProposal());
+      proposalRepo.save.mockResolvedValue(makeProposal({ title: 'Test' }));
+
+      const result = await service.createProposal('GPROPOSER', {
+        title: 'Test Proposal',
+        actionType: 'update_fee',
+        actionParams: { fee: 200 },
+      } as never);
+
+      expect(proposalRepo.create).toHaveBeenCalled();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ── checkExpiry via getProposalById ─────────────────────────────────────
+
+  describe('checkExpiry — via getProposalById', () => {
+    let proposalRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let voteRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let configRepo: jest.Mocked<Record<string, jest.Mock>>;
+    let dataSource: { createQueryRunner: jest.Mock };
+    let stellarService: { execute: jest.Mock };
+    let configService: { get: jest.Mock };
+    let service: GovernanceService;
+
+    beforeEach(async () => {
+      proposalRepo = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+        createQueryBuilder: jest.fn(),
+      } as never;
+      voteRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
+      configRepo = {
+        findOne: jest.fn().mockResolvedValue(makeConfig()),
+        create: jest.fn(),
+        save: jest.fn(),
+      } as never;
+      dataSource = { createQueryRunner: jest.fn() };
+      stellarService = { execute: jest.fn() };
+      configService = { get: jest.fn() };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          GovernanceService,
+          { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
+          { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
+          { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
+          { provide: ConfigService, useValue: configService },
+          { provide: DataSource, useValue: dataSource },
+          { provide: StellarService, useValue: stellarService },
+        ],
+      }).compile();
+
+      service = module.get<GovernanceService>(GovernanceService);
+    });
+
+    it('marks an expired active proposal as EXPIRED when fetched', async () => {
+      const pastDeadline = new Date(Date.now() - 3600_000);
+      const expiredProposal = makeProposal({
+        status: ProposalStatus.ACTIVE,
+        deadline: pastDeadline,
+      });
+      proposalRepo.findOne.mockResolvedValue(expiredProposal);
+      proposalRepo.save.mockResolvedValue({ ...expiredProposal, status: ProposalStatus.EXPIRED });
+
+      const result = await service.getProposalById('prop-1');
+
+      expect(proposalRepo.save).toHaveBeenCalled();
+      expect(result.status).toBe(ProposalStatus.EXPIRED);
+    });
+
+    it('does not modify a non-ACTIVE proposal (already EXPIRED)', async () => {
+      const alreadyExpired = makeProposal({ status: ProposalStatus.EXPIRED });
+      proposalRepo.findOne.mockResolvedValue(alreadyExpired);
+
+      const result = await service.getProposalById('prop-1');
+
+      expect(proposalRepo.save).not.toHaveBeenCalled();
+      expect(result.status).toBe(ProposalStatus.EXPIRED);
+    });
   });
 });
