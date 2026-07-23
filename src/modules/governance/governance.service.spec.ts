@@ -916,18 +916,32 @@ describe('GovernanceService', () => {
       service = module.get<GovernanceService>(GovernanceService);
     });
 
-    it('marks an expired active proposal as EXPIRED when fetched', async () => {
+    it('marks an expired active proposal as EXPIRED via a conditional UPDATE (not load+save)', async () => {
       const pastDeadline = new Date(Date.now() - 3600_000);
       const expiredProposal = makeProposal({
         status: ProposalStatus.ACTIVE,
         deadline: pastDeadline,
       });
       proposalRepo.findOne.mockResolvedValue(expiredProposal);
-      proposalRepo.save.mockResolvedValue({ ...expiredProposal, status: ProposalStatus.EXPIRED });
+
+      const qb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      proposalRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.getProposalById('prop-1');
 
-      expect(proposalRepo.save).toHaveBeenCalled();
+      expect(proposalRepo.save).not.toHaveBeenCalled();
+      expect(qb.update).toHaveBeenCalledWith(Proposal);
+      expect(qb.set).toHaveBeenCalledWith({ status: ProposalStatus.EXPIRED });
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('status'),
+        expect.objectContaining({ active: ProposalStatus.ACTIVE }),
+      );
       expect(result.status).toBe(ProposalStatus.EXPIRED);
     });
 
@@ -938,7 +952,43 @@ describe('GovernanceService', () => {
       const result = await service.getProposalById('prop-1');
 
       expect(proposalRepo.save).not.toHaveBeenCalled();
+      expect(proposalRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(result.status).toBe(ProposalStatus.EXPIRED);
+    });
+
+    it('under concurrent reads, only the request that wins the conditional UPDATE reports EXPIRED status', async () => {
+      // Simulates two concurrent getProposalById() calls racing on the same
+      // just-expired proposal. Only the first UPDATE (status still 'active'
+      // at execution time) affects a row; the second, running after the first
+      // committed, matches zero rows because the WHERE status='active' guard
+      // no longer holds.
+      const pastDeadline = new Date(Date.now() - 3600_000);
+      const expiredProposal = makeProposal({
+        status: ProposalStatus.ACTIVE,
+        deadline: pastDeadline,
+      });
+      proposalRepo.findOne.mockResolvedValue(expiredProposal);
+
+      let updateCallIndex = 0;
+      proposalRepo.createQueryBuilder.mockImplementation(() => ({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockImplementation(async () => {
+          updateCallIndex++;
+          return { affected: updateCallIndex === 1 ? 1 : 0 };
+        }),
+      }));
+
+      const [first, second] = await Promise.all([
+        service.getProposalById('prop-1'),
+        service.getProposalById('prop-1'),
+      ]);
+
+      expect(proposalRepo.save).not.toHaveBeenCalled();
+      expect(first.status).toBe(ProposalStatus.EXPIRED);
+      expect(second.status).toBe(ProposalStatus.EXPIRED);
     });
   });
 });

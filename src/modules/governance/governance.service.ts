@@ -372,8 +372,21 @@ export class GovernanceService {
       return;
     }
     if (new Date() > new Date(proposal.deadline)) {
-      proposal.status = ProposalStatus.EXPIRED;
-      await this.proposalRepo.save(proposal);
+      // Conditional UPDATE (not load + save) so that concurrent reads of the
+      // same expired proposal cannot each issue their own save() call; only
+      // the request whose UPDATE actually flips the row (status still
+      // 'active' at UPDATE time) reflects the transition back to the caller.
+      const result = await this.proposalRepo
+        .createQueryBuilder()
+        .update(Proposal)
+        .set({ status: ProposalStatus.EXPIRED })
+        .where('id = :id', { id: proposal.id })
+        .andWhere('status = :active', { active: ProposalStatus.ACTIVE })
+        .execute();
+
+      if (result.affected) {
+        proposal.status = ProposalStatus.EXPIRED;
+      }
     }
   }
 }
