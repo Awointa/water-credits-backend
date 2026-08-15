@@ -6,6 +6,7 @@ import { CreditsService } from './credits.service';
 import { CreditsRetirementProcessor } from './credits-retirement.processor';
 import { Retirement } from './entities/retirement.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
   imports: [
@@ -22,6 +23,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
       },
     }),
     NotificationsModule,
+    // Provides ProjectsService and the Project repository for on-chain
+    // credit lookups (creditTokenAddress) and active-project counts.
+    ProjectsModule,
   ],
   controllers: [CreditsController],
   providers: [CreditsService, CreditsRetirementProcessor],

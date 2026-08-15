@@ -11,6 +11,16 @@ import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 export class CreditsController {
   constructor(private readonly creditsService: CreditsService) {}
 
+  @Get()
+  async getCreditOverview() {
+    return this.creditsService.getCreditOverview();
+  }
+
+  @Get('projects/:projectId')
+  async getProjectCredits(@Param('projectId') projectId: string) {
+    return this.creditsService.getProjectCredits(projectId);
+  }
+
   @Get('portfolio')
   async getPortfolio(@CurrentUser('id') userId: string) {
     return this.creditsService.getPortfolio(userId);
