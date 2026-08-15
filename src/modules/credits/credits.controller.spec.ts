@@ -20,6 +20,8 @@ describe('CreditsController', () => {
             getRetirements: jest.fn(),
             getCertificate: jest.fn(),
             getTotalRetired: jest.fn(),
+            getCreditOverview: jest.fn(),
+            getProjectCredits: jest.fn(),
           },
         },
       ],
@@ -110,6 +112,47 @@ describe('CreditsController', () => {
 
       expect(creditsService.getTotalRetired).toHaveBeenCalledWith();
       expect(result).toEqual({ total: 500 });
+    });
+  });
+
+  describe('getCreditOverview', () => {
+    it('should call creditsService.getCreditOverview and return the overview', async () => {
+      const expected = {
+        totalMinted: 2000,
+        totalRetired: 400,
+        activeProjects: 3,
+        topRetirers: [{ id: 'u-1', name: 'Alice', totalRetired: 150 }],
+        onChainData: { totalMinted: 2000, totalRetired: 400 },
+        stale: false,
+      };
+      creditsService.getCreditOverview.mockResolvedValue(expected);
+
+      const result = await controller.getCreditOverview();
+
+      expect(creditsService.getCreditOverview).toHaveBeenCalledWith();
+      expect(result).toBe(expected);
+    });
+  });
+
+  describe('getProjectCredits', () => {
+    it('should call creditsService.getProjectCredits with the projectId param', async () => {
+      const projectId = 'proj-123';
+      const expected = {
+        projectId,
+        creditTokenAddress: null,
+        onChainBalance: null,
+        totalMinted: null,
+        totalRetired: 0,
+        retirements: [],
+        onChainData: null,
+        stale: false,
+      };
+      creditsService.getProjectCredits.mockResolvedValue(expected);
+
+      const result = await controller.getProjectCredits(projectId);
+
+      expect(creditsService.getProjectCredits).toHaveBeenCalledWith(projectId);
+      expect(result).toBe(expected);
     });
   });
 });

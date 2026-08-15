@@ -3,9 +3,12 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
+import { BigNumber } from 'bignumber.js';
 import { CreditsService } from './credits.service';
 import { Retirement } from './entities/retirement.entity';
 import { RetireCreditsDto } from './dto/retire-credits.dto';
+import { Project } from '../projects/entities/project.entity';
+import { StellarService } from '../stellar/stellar.service';
 
 // ── Typed mock factories ──────────────────────────────────────────────────────
 
@@ -53,8 +56,20 @@ describe('CreditsService', () => {
       providers: [
         CreditsService,
         { provide: getRepositoryToken(Retirement), useValue: retirementRepo },
+        {
+          provide: getRepositoryToken(Project),
+          useValue: { find: jest.fn(), findOne: jest.fn(), count: jest.fn() },
+        },
         { provide: getQueueToken('retirements'), useValue: retirementsQueue },
         { provide: ConfigService, useValue: { get: jest.fn() } },
+        {
+          provide: StellarService,
+          useValue: {
+            getBalance: jest.fn(),
+            getTotalSupply: jest.fn(),
+            getTotalRetired: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -346,8 +361,20 @@ describe('CreditsService — getPortfolio and getRetirements', () => {
       providers: [
         CreditsService,
         { provide: getRepositoryToken(Retirement), useValue: retirementRepo },
+        {
+          provide: getRepositoryToken(Project),
+          useValue: { find: jest.fn(), findOne: jest.fn(), count: jest.fn() },
+        },
         { provide: getQueueToken('retirements'), useValue: retirementsQueue },
         { provide: ConfigService, useValue: { get: jest.fn() } },
+        {
+          provide: StellarService,
+          useValue: {
+            getBalance: jest.fn(),
+            getTotalSupply: jest.fn(),
+            getTotalRetired: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -489,6 +516,269 @@ describe('CreditsService — getPortfolio and getRetirements', () => {
         where: { projectId: 'proj-1' },
         order: { retiredAt: 'DESC' },
       });
+    });
+  });
+});
+
+// ── getCreditOverview and getProjectCredits ──────────────────────────────
+
+describe('CreditsService — getCreditOverview and getProjectCredits', () => {
+  let service: CreditsService;
+  let retirementRepo: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
+  let projectRepo: { find: jest.Mock; findOne: jest.Mock; count: jest.Mock };
+  let stellarService: {
+    getBalance: jest.Mock;
+    getTotalSupply: jest.Mock;
+    getTotalRetired: jest.Mock;
+  };
+
+  const makeQb = (overrides: Record<string, unknown> = {}) => ({
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    innerJoin: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    addGroupBy: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+    getRawMany: jest.fn().mockResolvedValue([]),
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    retirementRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
+      save: jest.fn(),
+      createQueryBuilder: jest.fn(() => makeQb()),
+    };
+    projectRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      count: jest.fn().mockResolvedValue(0),
+    };
+    stellarService = {
+      getBalance: jest.fn().mockResolvedValue(new BigNumber(0)),
+      getTotalSupply: jest.fn().mockResolvedValue(new BigNumber(0)),
+      getTotalRetired: jest.fn().mockResolvedValue(new BigNumber(0)),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CreditsService,
+        { provide: getRepositoryToken(Retirement), useValue: retirementRepo },
+        { provide: getRepositoryToken(Project), useValue: projectRepo },
+        { provide: getQueueToken('retirements'), useValue: { add: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: StellarService, useValue: stellarService },
+      ],
+    }).compile();
+
+    service = module.get<CreditsService>(CreditsService);
+  });
+
+  // ── getCreditOverview ───────────────────────────────────────────────────
+
+  describe('getCreditOverview', () => {
+    it('returns DB values plus on-chain totals when the RPC is available', async () => {
+      retirementRepo.createQueryBuilder.mockReturnValue(
+        makeQb({
+          getRawOne: jest.fn().mockResolvedValue({ total: '250' }),
+          getRawMany: jest.fn().mockResolvedValue([
+            { id: 'u-1', name: 'Alice', totalRetired: '150' },
+            { id: 'u-2', name: 'Bob', totalRetired: '100' },
+          ]),
+        }),
+      );
+      projectRepo.count.mockResolvedValue(3);
+      projectRepo.find.mockResolvedValue([
+        { id: 'p-1', creditTokenAddress: 'C-token-1' },
+        { id: 'p-2', creditTokenAddress: 'C-token-2' },
+      ]);
+      stellarService.getTotalSupply.mockResolvedValue(new BigNumber(1000));
+      stellarService.getTotalRetired.mockResolvedValue(new BigNumber(200));
+
+      const result = await service.getCreditOverview();
+
+      expect(result.totalMinted).toBe(2000);
+      expect(result.totalRetired).toBe(400);
+      expect(result.activeProjects).toBe(3);
+      expect(result.topRetirers).toEqual([
+        { id: 'u-1', name: 'Alice', totalRetired: 150 },
+        { id: 'u-2', name: 'Bob', totalRetired: 100 },
+      ]);
+      expect(result.onChainData).toEqual({ totalMinted: 2000, totalRetired: 400 });
+      expect(result.stale).toBe(false);
+      expect(stellarService.getTotalSupply).toHaveBeenCalledTimes(2);
+    });
+
+    it('degrades to DB values with stale: true when the Stellar RPC fails', async () => {
+      retirementRepo.createQueryBuilder.mockReturnValue(
+        makeQb({
+          getRawOne: jest.fn().mockResolvedValue({ total: '250' }),
+          getRawMany: jest
+            .fn()
+            .mockResolvedValue([{ id: 'u-1', name: 'Alice', totalRetired: '150' }]),
+        }),
+      );
+      projectRepo.count.mockResolvedValue(3);
+      projectRepo.find.mockResolvedValue([{ id: 'p-1', creditTokenAddress: 'C-token-1' }]);
+      stellarService.getTotalSupply.mockRejectedValue(new Error('connection refused'));
+
+      const result = await service.getCreditOverview();
+
+      expect(result.stale).toBe(true);
+      expect(result.onChainData).toBeNull();
+      expect(result.totalMinted).toBeNull();
+      // DB-sourced values survive the RPC failure
+      expect(result.totalRetired).toBe(250);
+      expect(result.activeProjects).toBe(3);
+      expect(result.topRetirers).toEqual([{ id: 'u-1', name: 'Alice', totalRetired: 150 }]);
+    });
+
+    it('skips on-chain calls entirely when no project has a credit token address', async () => {
+      retirementRepo.createQueryBuilder.mockReturnValue(
+        makeQb({
+          getRawOne: jest.fn().mockResolvedValue({ total: '250' }),
+        }),
+      );
+      projectRepo.count.mockResolvedValue(3);
+      projectRepo.find.mockResolvedValue([]);
+
+      const result = await service.getCreditOverview();
+
+      expect(result.totalMinted).toBeNull();
+      expect(result.totalRetired).toBe(250);
+      expect(result.onChainData).toBeNull();
+      expect(result.stale).toBe(false);
+      expect(stellarService.getTotalSupply).not.toHaveBeenCalled();
+      expect(stellarService.getTotalRetired).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── getProjectCredits ───────────────────────────────────────────────────
+
+  describe('getProjectCredits', () => {
+    it('returns on-chain balance and totals joined with local retirements', async () => {
+      projectRepo.findOne.mockResolvedValue({
+        id: 'p-1',
+        creditTokenAddress: 'C-token-1',
+        owner: { wallet: 'G-owner-1' },
+      });
+      retirementRepo.find.mockResolvedValue([
+        { id: 'r-1', projectId: 'p-1', amount: 100 },
+        { id: 'r-2', projectId: 'p-1', amount: 50 },
+      ] as never);
+      stellarService.getBalance.mockResolvedValue(new BigNumber(500));
+      stellarService.getTotalSupply.mockResolvedValue(new BigNumber(1000));
+      stellarService.getTotalRetired.mockResolvedValue(new BigNumber(200));
+
+      const result = await service.getProjectCredits('p-1');
+
+      expect(result.projectId).toBe('p-1');
+      expect(result.creditTokenAddress).toBe('C-token-1');
+      expect(result.onChainBalance).toBe(500);
+      expect(result.totalMinted).toBe(1000);
+      expect(result.totalRetired).toBe(200);
+      expect(result.retirements).toHaveLength(2);
+      expect(result.onChainData).toEqual({
+        balance: 500,
+        totalMinted: 1000,
+        totalRetired: 200,
+      });
+      expect(result.stale).toBe(false);
+      expect(stellarService.getBalance).toHaveBeenCalledWith('C-token-1', 'G-owner-1');
+    });
+
+    it('returns null on-chain values without an RPC call when creditTokenAddress is null', async () => {
+      projectRepo.findOne.mockResolvedValue({
+        id: 'p-1',
+        creditTokenAddress: null,
+        owner: { wallet: 'G-owner-1' },
+      });
+      retirementRepo.find.mockResolvedValue([
+        { id: 'r-1', projectId: 'p-1', amount: 100 },
+        { id: 'r-2', projectId: 'p-1', amount: 50 },
+      ] as never);
+
+      const result = await service.getProjectCredits('p-1');
+
+      expect(result.creditTokenAddress).toBeNull();
+      expect(result.onChainBalance).toBeNull();
+      expect(result.totalMinted).toBeNull();
+      // DB-sourced total stays available
+      expect(result.totalRetired).toBe(150);
+      expect(result.retirements).toHaveLength(2);
+      expect(result.onChainData).toBeNull();
+      expect(result.stale).toBe(false);
+      expect(stellarService.getBalance).not.toHaveBeenCalled();
+      expect(stellarService.getTotalSupply).not.toHaveBeenCalled();
+      expect(stellarService.getTotalRetired).not.toHaveBeenCalled();
+    });
+
+    it('degrades to DB values with stale: true when the Stellar RPC fails', async () => {
+      projectRepo.findOne.mockResolvedValue({
+        id: 'p-1',
+        creditTokenAddress: 'C-token-1',
+        owner: { wallet: 'G-owner-1' },
+      });
+      retirementRepo.find.mockResolvedValue([
+        { id: 'r-1', projectId: 'p-1', amount: 100 },
+        { id: 'r-2', projectId: 'p-1', amount: 50 },
+      ] as never);
+      stellarService.getBalance.mockRejectedValue(new Error('RPC timeout'));
+
+      const result = await service.getProjectCredits('p-1');
+
+      expect(result.stale).toBe(true);
+      expect(result.onChainData).toBeNull();
+      expect(result.onChainBalance).toBeNull();
+      expect(result.totalMinted).toBeNull();
+      expect(result.totalRetired).toBe(150);
+      expect(result.retirements).toHaveLength(2);
+    });
+
+    it('keeps on-chain supply/retired but null balance when the owner has no wallet', async () => {
+      projectRepo.findOne.mockResolvedValue({
+        id: 'p-1',
+        creditTokenAddress: 'C-token-1',
+        owner: null,
+      });
+      retirementRepo.find.mockResolvedValue([]);
+      stellarService.getTotalSupply.mockResolvedValue(new BigNumber(1000));
+      stellarService.getTotalRetired.mockResolvedValue(new BigNumber(200));
+
+      const result = await service.getProjectCredits('p-1');
+
+      expect(result.onChainBalance).toBeNull();
+      expect(result.totalMinted).toBe(1000);
+      expect(result.totalRetired).toBe(200);
+      expect(result.onChainData).toEqual({
+        balance: null,
+        totalMinted: 1000,
+        totalRetired: 200,
+      });
+      expect(result.stale).toBe(false);
+      expect(stellarService.getBalance).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when the project does not exist', async () => {
+      projectRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getProjectCredits('missing')).rejects.toThrow(NotFoundException);
     });
   });
 });
