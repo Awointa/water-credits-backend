@@ -5,10 +5,11 @@ import { OracleController } from './oracle.controller';
 import { OracleService } from './oracle.service';
 import { OracleProcessor } from './oracle-processor';
 import { OracleSubmission } from './entities/oracle-submission.entity';
+import { SensorReading } from '../sensors/entities/sensor-reading.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OracleSubmission]),
+    TypeOrmModule.forFeature([OracleSubmission, SensorReading]),
     BullModule.registerQueue({
       name: 'oracle-submit',
       defaultJobOptions: {
