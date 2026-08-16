@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { SorobanRpc } from '@stellar/stellar-sdk';
 import { OracleProcessor } from './oracle-processor';
 import { OracleSubmission, SubmissionStatus } from './entities/oracle-submission.entity';
+import { GovernanceConfig } from '../governance/entities/governance-config.entity';
 import { StellarService } from '../stellar/stellar.service';
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,10 @@ describe('OracleProcessor', () => {
         {
           provide: getRepositoryToken(OracleSubmission),
           useValue: { findOne: findOneMock, save: saveMock },
+        },
+        {
+          provide: getRepositoryToken(GovernanceConfig),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
         },
         { provide: StellarService, useValue: { submitReading: submitReadingMock } },
         { provide: ConfigService, useValue: { get: configGetMock } },
