@@ -13,6 +13,11 @@ import { GovernanceConfig } from '../governance/entities/governance-config.entit
     // batch-start (Issue #34).  GovernanceModule also registers it; TypeORM
     // deduplicates the underlying repository provider.
     TypeOrmModule.forFeature([OracleSubmission, GovernanceConfig]),
+import { SensorReading } from '../sensors/entities/sensor-reading.entity';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([OracleSubmission, SensorReading]),
     BullModule.registerQueue({
       name: 'oracle-submit',
       defaultJobOptions: {
