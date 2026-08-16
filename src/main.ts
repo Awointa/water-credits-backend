@@ -32,6 +32,12 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // The Socket.io Redis adapter is initialised per-gateway namespace inside each
+  // gateway's afterInit() hook (NotificationsGateway, SensorsGateway).  This
+  // guarantees the adapter is attached before the first client can connect and
+  // allows each namespace to share the same Redis pub/sub channel prefix while
+  // maintaining namespace isolation.  No top-level adapter configuration is
+  // required here.
   await app.listen(port);
   Logger.log(`Server running on port ${port} in ${nodeEnv} mode`);
 }
