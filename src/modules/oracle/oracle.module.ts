@@ -5,10 +5,14 @@ import { OracleController } from './oracle.controller';
 import { OracleService } from './oracle.service';
 import { OracleProcessor } from './oracle-processor';
 import { OracleSubmission } from './entities/oracle-submission.entity';
+import { GovernanceConfig } from '../governance/entities/governance-config.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OracleSubmission]),
+    // GovernanceConfig is needed by OracleProcessor to snapshot config at
+    // batch-start (Issue #34).  GovernanceModule also registers it; TypeORM
+    // deduplicates the underlying repository provider.
+    TypeOrmModule.forFeature([OracleSubmission, GovernanceConfig]),
     BullModule.registerQueue({
       name: 'oracle-submit',
       defaultJobOptions: {
