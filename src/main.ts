@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -12,6 +14,13 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3001);
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: nodeEnv === 'production' ? undefined : false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   app.setGlobalPrefix('api/v1');
 
@@ -31,6 +40,30 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
   });
+
+  if (nodeEnv !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Water Credits API')
+      .setDescription(
+        'Off-chain orchestration layer for the Water Quality & Replenishment Credits protocol.',
+      )
+      .setVersion('0.1.0')
+      .addTag('auth', 'Stellar wallet authentication')
+      .addTag('users', 'User profiles and role management')
+      .addTag('projects', 'Watershed restoration projects')
+      .addTag('sensors', 'Sensor device registration and reading ingestion')
+      .addTag('credits', 'Credit balances, retirements, and certificates')
+      .addTag('oracle', 'Oracle node submissions')
+      .addTag('governance', 'Proposals and protocol configuration')
+      .addTag('analytics', 'Aggregated dashboard metrics')
+      .addTag('notifications', 'In-app user notifications')
+      .addTag('health', 'Liveness, readiness, and health reporting')
+      .addBearerAuth()
+      .addApiKey({ type: 'apiKey', in: 'header', name: 'X-API-Key' }, 'api-key')
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(port);
   Logger.log(`Server running on port ${port} in ${nodeEnv} mode`);
