@@ -1,4 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Socket } from 'socket.io';
 import { SensorsGateway } from './sensors.gateway';
 import { ProjectsService } from '../projects/projects.service';
@@ -22,20 +23,39 @@ describe('SensorsGateway', () => {
   let gateway: SensorsGateway;
   let jwtService: { verifyAsync: jest.Mock };
   let projectsService: { findById: jest.Mock };
+  let configService: { get: jest.Mock };
 
   beforeEach(() => {
     jwtService = { verifyAsync: jest.fn() };
     projectsService = { findById: jest.fn() };
+    configService = {
+      get: jest.fn((key: string, defaultVal?: unknown) => {
+        const values: Record<string, unknown> = {
+          REDIS_HOST: 'localhost',
+          REDIS_PORT: 6379,
+          REDIS_PASSWORD: undefined,
+        };
+        return key in values ? values[key] : defaultVal;
+      }),
+    };
     gateway = new SensorsGateway(
       jwtService as unknown as JwtService,
       projectsService as unknown as ProjectsService,
+      configService as unknown as ConfigService,
     );
+    // afterInit is NOT called in unit tests — Redis clients are never created.
   });
 
   describe('handleConnection', () => {
     it('accepts a client with a valid token', async () => {
-      jwtService.verifyAsync.mockResolvedValue({ sub: 'user-1', wallet: 'G...', role: UserRole.FARMER });
-      const client = mockSocket({ handshake: { auth: { token: 'valid.jwt' }, headers: {}, query: {} } as never });
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'user-1',
+        wallet: 'G...',
+        role: UserRole.FARMER,
+      });
+      const client = mockSocket({
+        handshake: { auth: { token: 'valid.jwt' }, headers: {}, query: {} } as never,
+      });
 
       await gateway.handleConnection(client);
 
@@ -53,7 +73,9 @@ describe('SensorsGateway', () => {
 
     it('disconnects a client with an invalid token', async () => {
       jwtService.verifyAsync.mockRejectedValue(new Error('invalid signature'));
-      const client = mockSocket({ handshake: { auth: { token: 'bad.jwt' }, headers: {}, query: {} } as never });
+      const client = mockSocket({
+        handshake: { auth: { token: 'bad.jwt' }, headers: {}, query: {} } as never,
+      });
 
       await gateway.handleConnection(client);
 
@@ -64,7 +86,9 @@ describe('SensorsGateway', () => {
   describe('handleSubscribeProject', () => {
     async function connectedClient(userId: string, role: string): Promise<Socket> {
       jwtService.verifyAsync.mockResolvedValue({ sub: userId, wallet: 'G...', role });
-      const client = mockSocket({ handshake: { auth: { token: 't' }, headers: {}, query: {} } as never });
+      const client = mockSocket({
+        handshake: { auth: { token: 't' }, headers: {}, query: {} } as never,
+      });
       await gateway.handleConnection(client);
       return client;
     }
@@ -86,7 +110,10 @@ describe('SensorsGateway', () => {
       await gateway.handleSubscribeProject(client, 'p1');
 
       expect(client.join).not.toHaveBeenCalled();
-      expect(client.emit).toHaveBeenCalledWith('error', expect.objectContaining({ message: expect.any(String) }));
+      expect(client.emit).toHaveBeenCalledWith(
+        'error',
+        expect.objectContaining({ message: expect.any(String) }),
+      );
     });
 
     it('allows privileged roles (admin/verifier/oracle) regardless of ownership', async () => {

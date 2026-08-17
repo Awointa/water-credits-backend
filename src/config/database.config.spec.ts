@@ -1,4 +1,6 @@
-import { readFileSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import databaseConfig from './database.config';
 
 describe('databaseConfig', () => {
@@ -36,13 +38,20 @@ describe('databaseConfig', () => {
   });
 
   it('loads the CA certificate from DATABASE_SSL_CA when provided', () => {
+    const caDir = mkdtempSync(join(tmpdir(), 'wc-ca-'));
+    const caPath = join(caDir, 'ca.pem');
+    const caContent = '-----BEGIN CERTIFICATE-----\nMOCK_CA\n-----END CERTIFICATE-----';
+    writeFileSync(caPath, caContent);
     process.env.DATABASE_SSL = 'true';
-    process.env.DATABASE_SSL_CA = '/tmp/opencode/ca.pem';
-    const expectedCa = readFileSync('/tmp/opencode/ca.pem');
-    expect(databaseConfig().ssl).toEqual({
-      rejectUnauthorized: true,
-      ca: expectedCa,
-    });
+    process.env.DATABASE_SSL_CA = caPath;
+    try {
+      expect(databaseConfig().ssl).toEqual({
+        rejectUnauthorized: true,
+        ca: readFileSync(caPath),
+      });
+    } finally {
+      rmSync(caDir, { recursive: true, force: true });
+    }
   });
 
   it('preserves the default connection settings', () => {
