@@ -2,17 +2,24 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SorobanRpc, Keypair, Transaction, xdr } from '@stellar/stellar-sdk';
 
+const DEFAULT_SIMULATION_SEED = Buffer.alloc(32);
+
 @Injectable()
 export class StellarClient {
   private readonly logger = new Logger(StellarClient.name);
   private server: SorobanRpc.Server;
   private keypair: Keypair;
+  private readonly simulationKeypair: Keypair;
 
   constructor(private configService: ConfigService) {
     const rpcUrl = this.configService.get<string>('stellar.rpcUrl')!;
     const backendSecret = this.configService.get<string>('stellar.backendSecret');
+    const simulationSecret = this.configService.get<string>('stellar.simulationSecret');
 
     this.server = new SorobanRpc.Server(rpcUrl);
+    this.simulationKeypair = simulationSecret
+      ? Keypair.fromSecret(simulationSecret)
+      : Keypair.fromRawEd25519Seed(DEFAULT_SIMULATION_SEED);
 
     if (backendSecret && backendSecret !== 'SDN...TODO') {
       this.keypair = Keypair.fromSecret(backendSecret);
@@ -31,6 +38,16 @@ export class StellarClient {
     return this.keypair;
   }
 
+  getSimulationKeypair(): Keypair {
+    return this.simulationKeypair;
+  }
+
+  private assertSendable(tx: Transaction): void {
+    if (tx.source === this.simulationKeypair.publicKey()) {
+      throw new Error('Simulation transactions must not be submitted');
+    }
+  }
+
   async simulateTx(tx: Transaction): Promise<SorobanRpc.Api.SimulateTransactionResponse> {
     return this.server.simulateTransaction(tx);
   }
@@ -40,6 +57,7 @@ export class StellarClient {
   }
 
   async sendTx(tx: Transaction): Promise<SorobanRpc.Api.GetTransactionResponse> {
+    this.assertSendable(tx);
     const response = await this.server.sendTransaction(tx);
     if (response.status === 'ERROR') {
       throw new Error(`Transaction failed: ${JSON.stringify(response)}`);
@@ -76,6 +94,7 @@ export class StellarClient {
   async sendTxWithHash(
     tx: Transaction,
   ): Promise<{ txHash: string; response: SorobanRpc.Api.GetTransactionResponse }> {
+    this.assertSendable(tx);
     const sendResponse = await this.server.sendTransaction(tx);
     if (sendResponse.status === 'ERROR') {
       throw new Error(`Transaction failed: ${JSON.stringify(sendResponse)}`);
