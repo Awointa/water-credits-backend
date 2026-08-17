@@ -67,10 +67,13 @@ export class StellarService {
     args: xdr.ScVal[] = [],
   ): Promise<unknown> {
     const contract = new Contract(contractId);
-    const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), '0'), {
-      fee: '100',
-      networkPassphrase: (await this.getNetwork()).passphrase,
-    })
+    const tx = new TransactionBuilder(
+      new Account(this.stellarClient.getSimulationKeypair().publicKey(), '0'),
+      {
+        fee: '100',
+        networkPassphrase: (await this.getNetwork()).passphrase,
+      },
+    )
       .addOperation(contract.call(method, ...args))
       .setTimeout(0)
       .build();
