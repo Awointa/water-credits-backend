@@ -94,10 +94,7 @@ export function validateIssuerAddress(issuer: string): void {
   const trimmed = issuer.trim();
 
   if (!trimmed.startsWith('G')) {
-    throw new ValidationError(
-      'issuer',
-      `Invalid issuer address "${trimmed}": must start with G`,
-    );
+    throw new ValidationError('issuer', `Invalid issuer address "${trimmed}": must start with G`);
   }
 
   try {
@@ -126,10 +123,7 @@ export function validateOperatorSecret(secret: string): Keypair {
   const trimmed = secret.trim();
 
   if (!trimmed.startsWith('S')) {
-    throw new ValidationError(
-      'operatorSecret',
-      'Operator secret key must start with S',
-    );
+    throw new ValidationError('operatorSecret', 'Operator secret key must start with S');
   }
 
   try {
@@ -304,7 +298,7 @@ export async function dryRunTransaction(
   }
 
   const fee = SorobanRpc.Api.isSimulationSuccess(simulation)
-    ? simulation.minResourceFee ?? '100'
+    ? (simulation.minResourceFee ?? '100')
     : '100';
 
   return {

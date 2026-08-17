@@ -9,18 +9,21 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiSecurity } from '@nestjs/swagger';
 import { SensorsService } from './sensors.service';
 import { CreateReadingDto } from './dto/create-reading.dto';
 import { QueryReadingsDto } from './dto/query-readings.dto';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { Public } from '../../common/decorators/public.decorator';
-import { ApiKeyAuth } from '../../common/decorators/api-key-auth.decorator';
+import { ApiKeyAuth as ApiKeyAuthMetadata } from '../../common/decorators/api-key-auth.decorator';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 import { SensorReading } from './entities/sensor-reading.entity';
 import { SensorDevice } from './entities/sensor-device.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 import { ThrottleSensor } from '../../common/decorators/throttle.decorator';
 
+@ApiTags('sensors')
+@ApiBearerAuth()
 @Controller('sensors')
 export class SensorsController {
   constructor(private readonly sensorsService: SensorsService) {}
@@ -34,15 +37,18 @@ export class SensorsController {
    */
   @Post('readings')
   @Public()
-  @ApiKeyAuth()
+  @ApiKeyAuthMetadata()
+  @ApiSecurity('api-key')
   @UseGuards(ApiKeyGuard)
   @ThrottleSensor()
+  @ApiOperation({ summary: 'Ingest a sensor reading (API key auth)' })
   @HttpCode(HttpStatus.CREATED)
   async ingestReading(@Body() dto: CreateReadingDto): Promise<SensorReading> {
     return this.sensorsService.ingestReading(dto);
   }
 
   @Get('readings')
+  @ApiOperation({ summary: 'List sensor readings (paginated)' })
   async getReadings(
     @Query() query: QueryReadingsDto,
   ): Promise<PaginatedResponseDto<SensorReading>> {
@@ -51,6 +57,7 @@ export class SensorsController {
   }
 
   @Get('readings/latest')
+  @ApiOperation({ summary: 'Get the latest reading (optionally per device)' })
   async getLatestReading(
     @Query('deviceId') deviceId?: string,
   ): Promise<SensorReading | SensorReading[]> {
@@ -58,6 +65,7 @@ export class SensorsController {
   }
 
   @Get('readings/summary')
+  @ApiOperation({ summary: 'Get aggregated summary metrics for a project' })
   async getAggregatedSummary(
     @Query('projectId') projectId: string,
     @Query('startDate') startDate?: string,
@@ -68,6 +76,7 @@ export class SensorsController {
 
   @Post('devices')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new sensor device' })
   async registerDevice(
     @Body() dto: RegisterDeviceDto,
   ): Promise<SensorDevice & { apiKeyPlaintext: string }> {
@@ -75,11 +84,13 @@ export class SensorsController {
   }
 
   @Get('devices')
+  @ApiOperation({ summary: 'List sensor devices (optionally per project)' })
   async getDevices(@Query('projectId') projectId?: string): Promise<SensorDevice[]> {
     return this.sensorsService.getDevices(projectId);
   }
 
   @Get('devices/:id')
+  @ApiOperation({ summary: 'Get a sensor device by ID' })
   async getDeviceById(@Param('id') id: string): Promise<SensorDevice> {
     return this.sensorsService.getDeviceById(id);
   }

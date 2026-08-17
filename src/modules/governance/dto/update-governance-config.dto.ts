@@ -1,11 +1,4 @@
-import {
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
  * Request body for PATCH /governance/config.

@@ -11,6 +11,7 @@ import {
   Patch,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GovernanceService } from './governance.service';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { VoteDto } from './dto/vote.dto';
@@ -25,6 +26,8 @@ import { Proposal } from './entities/proposal.entity';
 import { GovernanceConfig } from './entities/governance-config.entity';
 import { PaginatedResponseDto } from '../../common/dto/api-response.dto';
 
+@ApiTags('governance')
+@ApiBearerAuth()
 @Controller('governance')
 export class GovernanceController {
   constructor(private readonly governanceService: GovernanceService) {}
@@ -38,6 +41,7 @@ export class GovernanceController {
    */
   @Get('config')
   @Public()
+  @ApiOperation({ summary: 'Get current protocol parameters' })
   async getConfig(): Promise<GovernanceConfig> {
     return this.governanceService.getConfig();
   }
@@ -55,6 +59,7 @@ export class GovernanceController {
   @Patch('config')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.ACCEPTED) // 202: change accepted, not yet applied
+  @ApiOperation({ summary: 'Update protocol parameters (timelocked, admin)' })
   async updateConfig(
     @Body() dto: UpdateGovernanceConfigDto,
     @CurrentUser('wallet') actor: string,
@@ -79,6 +84,7 @@ export class GovernanceController {
    */
   @Get('config/pending')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List pending protocol config changes (admin)' })
   async getPendingConfigChanges(): Promise<PendingConfigChangeDto[]> {
     return this.governanceService.getPendingConfigChanges();
   }
@@ -90,6 +96,7 @@ export class GovernanceController {
   @Delete('config/pending/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel a pending protocol config change (admin)' })
   async cancelConfigChange(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('wallet') actor: string,
@@ -101,6 +108,7 @@ export class GovernanceController {
 
   @Get('proposals')
   @Public()
+  @ApiOperation({ summary: 'List governance proposals (paginated)' })
   async getProposals(@Query() query: GovernanceQueryDto): Promise<PaginatedResponseDto<Proposal>> {
     const { data, total, page, limit } = await this.governanceService.getProposals(query);
     return PaginatedResponseDto.from(data, total, page, limit);
@@ -108,6 +116,7 @@ export class GovernanceController {
 
   @Get('proposals/:id')
   @Public()
+  @ApiOperation({ summary: 'Get a proposal by ID' })
   async getProposalById(@Param('id') id: string): Promise<Proposal> {
     return this.governanceService.getProposalById(id);
   }
@@ -115,6 +124,7 @@ export class GovernanceController {
   @Post('proposals')
   @Roles(UserRole.ADMIN, UserRole.VERIFIER)
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new governance proposal' })
   async createProposal(
     @CurrentUser('wallet') proposer: string,
     @Body() dto: CreateProposalDto,
@@ -125,6 +135,7 @@ export class GovernanceController {
   @Post('proposals/:id/vote')
   @Roles(UserRole.ADMIN, UserRole.VERIFIER)
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cast a vote on a proposal' })
   async vote(
     @Param('id') id: string,
     @CurrentUser('wallet') voter: string,
@@ -136,6 +147,7 @@ export class GovernanceController {
   @Post('proposals/:id/execute')
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Execute an approved proposal (admin)' })
   async executeProposal(
     @Param('id') id: string,
     @CurrentUser('wallet') executor: string,

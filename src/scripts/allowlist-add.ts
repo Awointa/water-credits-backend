@@ -170,8 +170,12 @@ async function main(): Promise<void> {
   }
 
   // Allow env overrides for custom networks / local devnets
-  if (args.rpcUrl) networkConfig = { ...networkConfig, rpcUrl: args.rpcUrl };
-  if (args.passphrase) networkConfig = { ...networkConfig, passphrase: args.passphrase };
+  if (args.rpcUrl) {
+    networkConfig = { ...networkConfig, rpcUrl: args.rpcUrl };
+  }
+  if (args.passphrase) {
+    networkConfig = { ...networkConfig, passphrase: args.passphrase };
+  }
 
   ok(`Network:    ${COLORS.bold}${networkConfig.name}${COLORS.reset} (${networkConfig.rpcUrl})`);
 
@@ -183,9 +187,7 @@ async function main(): Promise<void> {
     ok(`RPC reachable — latest ledger: ${COLORS.bold}${latestLedger}${COLORS.reset}`);
   } catch (err) {
     fail((err as Error).message);
-    info(
-      'Check STELLAR_RPC_URL in your .env or pass --rpc-url to point at a reachable endpoint.',
-    );
+    info('Check STELLAR_RPC_URL in your .env or pass --rpc-url to point at a reachable endpoint.');
     process.exit(1);
   }
 
@@ -226,9 +228,9 @@ async function main(): Promise<void> {
       `Could not load operator account ${operatorKeypair.publicKey()}: ${(err as Error).message}`,
     );
     info(
-      'Ensure the operator account is funded and exists on ' +
-        networkConfig.name +
-        '. Use Friendbot for testnet.',
+      `Ensure the operator account is funded and exists on ${
+        networkConfig.name
+      }. Use Friendbot for testnet.`,
     );
     process.exit(1);
   }
@@ -303,7 +305,9 @@ async function main(): Promise<void> {
     while (attempts < maxAttempts) {
       if (statusResponse.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
         console.log();
-        ok(`${COLORS.bold}${COLORS.green}Asset successfully added to the allowlist.${COLORS.reset}`);
+        ok(
+          `${COLORS.bold}${COLORS.green}Asset successfully added to the allowlist.${COLORS.reset}`,
+        );
         console.log(`\n  Asset code:    ${COLORS.bold}${args.assetCode}${COLORS.reset}`);
         console.log(`  Issuer:        ${COLORS.bold}${args.issuer}${COLORS.reset}`);
         console.log(`  Contract:      ${COLORS.bold}${args.contractId}${COLORS.reset}`);

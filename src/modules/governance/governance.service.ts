@@ -14,7 +14,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Proposal, ProposalStatus } from './entities/proposal.entity';
 import { ProposalVote } from './entities/proposal-vote.entity';
 import { GovernanceConfig } from './entities/governance-config.entity';
-import { GovernanceConfigChange, ConfigChangeStatus } from './entities/governance-config-change.entity';
+import {
+  GovernanceConfigChange,
+  ConfigChangeStatus,
+} from './entities/governance-config-change.entity';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { VoteDto } from './dto/vote.dto';
 import { GovernanceQueryDto } from './dto/governance-query.dto';
@@ -83,9 +86,7 @@ export class GovernanceService {
 
     const config = await this.getConfig();
 
-    const effectiveAt = new Date(
-      Date.now() + config.timelockPeriod * 1_000,
-    );
+    const effectiveAt = new Date(Date.now() + config.timelockPeriod * 1_000);
 
     const change = this.configChangeRepo.create({
       configId: config.id,
@@ -124,19 +125,14 @@ export class GovernanceService {
 
   // ── Cancellation ─────────────────────────────────────────────────────────
 
-  async cancelConfigChange(
-    changeId: string,
-    cancelledBy: string,
-  ): Promise<PendingConfigChangeDto> {
+  async cancelConfigChange(changeId: string, cancelledBy: string): Promise<PendingConfigChangeDto> {
     const change = await this.configChangeRepo.findOne({ where: { id: changeId } });
 
     if (!change) {
       throw new NotFoundException(`Config change ${changeId} not found`);
     }
     if (change.status !== ConfigChangeStatus.PENDING) {
-      throw new BadRequestException(
-        `Cannot cancel a config change with status '${change.status}'`,
-      );
+      throw new BadRequestException(`Cannot cancel a config change with status '${change.status}'`);
     }
 
     change.status = ConfigChangeStatus.CANCELLED;
@@ -200,9 +196,7 @@ export class GovernanceService {
       reason: reason ?? null,
     });
 
-    this.logger.warn(
-      `Emergency config update by ${actor}: ${JSON.stringify(updates)}`,
-    );
+    this.logger.warn(`Emergency config update by ${actor}: ${JSON.stringify(updates)}`);
 
     return updatedConfig;
   }

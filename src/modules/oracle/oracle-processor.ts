@@ -134,10 +134,7 @@ export class OracleProcessor {
     // Apply the snapshotted scoring thresholds to the raw reading before
     // forwarding to the contract.  Using the snapshot here means the scoring
     // formula is fixed for the entire lifetime of this job, even across retries.
-    const reading = this.scoreReading(
-      snapshotToReading(submission.readingsSnapshot),
-      govConfig,
-    );
+    const reading = this.scoreReading(snapshotToReading(submission.readingsSnapshot), govConfig);
 
     let txHash: string;
     let txResponse: SorobanRpc.Api.GetTransactionResponse;

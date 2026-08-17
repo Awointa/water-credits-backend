@@ -1,8 +1,10 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { HealthService, HealthReport } from './health.service';
 import { Public } from '../../common/decorators/public.decorator';
 
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
@@ -13,6 +15,7 @@ export class HealthController {
    */
   @Get()
   @Public()
+  @ApiOperation({ summary: 'Full health report for load balancers and monitoring' })
   async check(@Res() res: Response): Promise<void> {
     const report: HealthReport = await this.healthService.getHealth();
     const httpStatus = report.status === 'down' ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
@@ -26,6 +29,7 @@ export class HealthController {
   @Get('live')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Kubernetes liveness probe' })
   live(): { status: string } {
     return { status: 'alive' };
   }
@@ -36,6 +40,7 @@ export class HealthController {
    */
   @Get('ready')
   @Public()
+  @ApiOperation({ summary: 'Kubernetes readiness probe' })
   async ready(@Res() res: Response): Promise<void> {
     const report = await this.healthService.getHealth();
     const dbDown = report.checks.database.status === 'down';

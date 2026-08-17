@@ -169,9 +169,9 @@ describe('CreditsRetirementProcessor', () => {
   it('fails gracefully instead of calling the contract with an undefined tokenId', async () => {
     findOneMock.mockResolvedValue(makeRetirement({ txHash: '' }));
 
-    await expect(
-      processor.processRetirement(makeJob({ tokenId: undefined })),
-    ).rejects.toThrow(/tokenId/);
+    await expect(processor.processRetirement(makeJob({ tokenId: undefined }))).rejects.toThrow(
+      /tokenId/,
+    );
 
     // Never reaches the Stellar SDK with an undefined contract id.
     expect(retireCreditsWithHashMock).not.toHaveBeenCalled();

@@ -1,4 +1,7 @@
-import { GovernanceConfigChange, ConfigChangeStatus } from '../entities/governance-config-change.entity';
+import {
+  GovernanceConfigChange,
+  ConfigChangeStatus,
+} from '../entities/governance-config-change.entity';
 
 /**
  * Public-facing representation of a pending (or historical) config change.

@@ -38,6 +38,7 @@ import oracleConfig from './config/oracle.config';
         username: configService.get('database.username'),
         password: configService.get('database.password'),
         database: configService.get('database.database'),
+        ssl: configService.get('database.ssl'),
         autoLoadEntities: true,
         synchronize: configService.get('app.nodeEnv') !== 'production',
       }),

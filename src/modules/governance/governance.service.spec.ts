@@ -675,7 +675,10 @@ describe('GovernanceService', () => {
       } as never;
       voteRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
       configRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() } as never;
-      dataSource = { createQueryRunner: jest.fn(), query: jest.fn().mockResolvedValue(undefined) } as never;
+      dataSource = {
+        createQueryRunner: jest.fn(),
+        query: jest.fn().mockResolvedValue(undefined),
+      } as never;
       stellarService = { execute: jest.fn() };
       configService = { get: jest.fn() };
 
@@ -685,7 +688,15 @@ describe('GovernanceService', () => {
           { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
           { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
           { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
-          { provide: getRepositoryToken(GovernanceConfigChange), useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() } },
+          {
+            provide: getRepositoryToken(GovernanceConfigChange),
+            useValue: {
+              find: jest.fn().mockResolvedValue([]),
+              findOne: jest.fn().mockResolvedValue(null),
+              create: jest.fn(),
+              save: jest.fn(),
+            },
+          },
           { provide: ConfigService, useValue: configService },
           { provide: DataSource, useValue: dataSource },
           { provide: StellarService, useValue: stellarService },
@@ -788,9 +799,9 @@ describe('GovernanceService', () => {
     });
 
     it('throws BadRequestException when no config fields are provided', async () => {
-      await expect(
-        service.proposeConfigChange('GADMIN', {} as never),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.proposeConfigChange('GADMIN', {} as never)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -819,7 +830,10 @@ describe('GovernanceService', () => {
         create: jest.fn(),
         save: jest.fn(),
       } as never;
-      dataSource = { createQueryRunner: jest.fn(), query: jest.fn().mockResolvedValue(undefined) } as never;
+      dataSource = {
+        createQueryRunner: jest.fn(),
+        query: jest.fn().mockResolvedValue(undefined),
+      } as never;
       stellarService = { execute: jest.fn() };
       configService = { get: jest.fn() };
 
@@ -829,7 +843,15 @@ describe('GovernanceService', () => {
           { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
           { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
           { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
-          { provide: getRepositoryToken(GovernanceConfigChange), useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() } },
+          {
+            provide: getRepositoryToken(GovernanceConfigChange),
+            useValue: {
+              find: jest.fn().mockResolvedValue([]),
+              findOne: jest.fn().mockResolvedValue(null),
+              create: jest.fn(),
+              save: jest.fn(),
+            },
+          },
           { provide: ConfigService, useValue: configService },
           { provide: DataSource, useValue: dataSource },
           { provide: StellarService, useValue: stellarService },
@@ -883,7 +905,10 @@ describe('GovernanceService', () => {
         create: jest.fn(),
         save: jest.fn(),
       } as never;
-      dataSource = { createQueryRunner: jest.fn(), query: jest.fn().mockResolvedValue(undefined) } as never;
+      dataSource = {
+        createQueryRunner: jest.fn(),
+        query: jest.fn().mockResolvedValue(undefined),
+      } as never;
       stellarService = { execute: jest.fn() };
       configService = { get: jest.fn() };
 
@@ -893,7 +918,15 @@ describe('GovernanceService', () => {
           { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
           { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
           { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
-          { provide: getRepositoryToken(GovernanceConfigChange), useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() } },
+          {
+            provide: getRepositoryToken(GovernanceConfigChange),
+            useValue: {
+              find: jest.fn().mockResolvedValue([]),
+              findOne: jest.fn().mockResolvedValue(null),
+              create: jest.fn(),
+              save: jest.fn(),
+            },
+          },
           { provide: ConfigService, useValue: configService },
           { provide: DataSource, useValue: dataSource },
           { provide: StellarService, useValue: stellarService },
@@ -944,7 +977,10 @@ describe('GovernanceService', () => {
         create: jest.fn(),
         save: jest.fn(),
       } as never;
-      dataSource = { createQueryRunner: jest.fn(), query: jest.fn().mockResolvedValue(undefined) } as never;
+      dataSource = {
+        createQueryRunner: jest.fn(),
+        query: jest.fn().mockResolvedValue(undefined),
+      } as never;
       stellarService = { execute: jest.fn() };
       configService = { get: jest.fn() };
 
@@ -954,7 +990,15 @@ describe('GovernanceService', () => {
           { provide: getRepositoryToken(Proposal), useValue: proposalRepo },
           { provide: getRepositoryToken(ProposalVote), useValue: voteRepo },
           { provide: getRepositoryToken(GovernanceConfig), useValue: configRepo },
-          { provide: getRepositoryToken(GovernanceConfigChange), useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() } },
+          {
+            provide: getRepositoryToken(GovernanceConfigChange),
+            useValue: {
+              find: jest.fn().mockResolvedValue([]),
+              findOne: jest.fn().mockResolvedValue(null),
+              create: jest.fn(),
+              save: jest.fn(),
+            },
+          },
           { provide: ConfigService, useValue: configService },
           { provide: DataSource, useValue: dataSource },
           { provide: StellarService, useValue: stellarService },

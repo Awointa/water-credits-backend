@@ -170,8 +170,12 @@ async function main(): Promise<void> {
   }
 
   // Allow env overrides for custom networks / local devnets
-  if (args.rpcUrl) networkConfig = { ...networkConfig, rpcUrl: args.rpcUrl };
-  if (args.passphrase) networkConfig = { ...networkConfig, passphrase: args.passphrase };
+  if (args.rpcUrl) {
+    networkConfig = { ...networkConfig, rpcUrl: args.rpcUrl };
+  }
+  if (args.passphrase) {
+    networkConfig = { ...networkConfig, passphrase: args.passphrase };
+  }
 
   ok(`Network:    ${COLORS.bold}${networkConfig.name}${COLORS.reset} (${networkConfig.rpcUrl})`);
 
@@ -183,9 +187,7 @@ async function main(): Promise<void> {
     ok(`RPC reachable — latest ledger: ${COLORS.bold}${latestLedger}${COLORS.reset}`);
   } catch (err) {
     fail((err as Error).message);
-    info(
-      'Check STELLAR_RPC_URL in your .env or pass --rpc-url to point at a reachable endpoint.',
-    );
+    info('Check STELLAR_RPC_URL in your .env or pass --rpc-url to point at a reachable endpoint.');
     process.exit(1);
   }
 
@@ -226,9 +228,9 @@ async function main(): Promise<void> {
       `Could not load operator account ${operatorKeypair.publicKey()}: ${(err as Error).message}`,
     );
     info(
-      'Ensure the operator account is funded and exists on ' +
-        networkConfig.name +
-        '. Use Friendbot for testnet.',
+      `Ensure the operator account is funded and exists on ${
+        networkConfig.name
+      }. Use Friendbot for testnet.`,
     );
     process.exit(1);
   }
@@ -287,12 +289,8 @@ async function main(): Promise<void> {
     warn(
       `  Asset:   ${COLORS.bold}${args.assetCode}${COLORS.reset} / ${COLORS.bold}${args.issuer}${COLORS.reset}`,
     );
-    warn(
-      `  This will immediately prevent new credits from being issued for this asset on-chain.`,
-    );
-    info(
-      'If this is intentional, re-run with --confirm (already set). Proceeding in 5 seconds…',
-    );
+    warn(`  This will immediately prevent new credits from being issued for this asset on-chain.`);
+    info('If this is intentional, re-run with --confirm (already set). Proceeding in 5 seconds…');
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 
