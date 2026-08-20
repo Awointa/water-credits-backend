@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { getQueueToken } from '@nestjs/bull';
 import { DataSource } from 'typeorm';
 import { Keypair } from '@stellar/stellar-sdk';
 import { SensorsService } from './sensors.service';
@@ -85,6 +86,7 @@ describe('SensorsService', () => {
   let readingRepo: MockRepo;
   let batchRepo: MockRepo;
   let dataSource: MockDataSource;
+  let sensorQueue: { add: jest.Mock };
 
   // A real Stellar keypair used for signature tests — generated once per suite.
   let testKeypair: Keypair;
@@ -98,6 +100,7 @@ describe('SensorsService', () => {
     readingRepo = makeMockRepo();
     batchRepo = makeMockRepo();
     dataSource = makeMockDataSource();
+    sensorQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -105,6 +108,7 @@ describe('SensorsService', () => {
         { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
         { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
         { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+        { provide: getQueueToken('sensor-ingestion'), useValue: sensorQueue },
         { provide: DataSource, useValue: dataSource },
         {
           provide: SensorProjectAccessService,
@@ -194,6 +198,28 @@ describe('SensorsService', () => {
       const result = await service.ingestReading(dto);
       expect(result).toBeDefined();
       expect(readingRepo.save).toHaveBeenCalled();
+    });
+
+    it('enqueues a sensor-ingestion job after saving the reading', async () => {
+      const payload = buildPayload('dev-001', TIMESTAMP, PARAMS);
+      const signature = signPayload(testKeypair, payload);
+
+      const dto: CreateReadingDto = {
+        deviceId: 'dev-001',
+        timestamp: TIMESTAMP,
+        ph: PARAMS.ph,
+        temperature: PARAMS.temperature,
+        signature,
+      };
+
+      const result = await service.ingestReading(dto);
+
+      expect(sensorQueue.add).toHaveBeenCalledTimes(1);
+      expect(sensorQueue.add).toHaveBeenCalledWith({
+        readingId: result.id,
+        deviceId: fakeDevice.id,
+        projectId: fakeDevice.projectId,
+      });
     });
 
     it('rejects a signature signed by a different keypair', async () => {
@@ -696,6 +722,7 @@ describe('SensorsService — registerDevice', () => {
         { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
         { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
         { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+        { provide: getQueueToken('sensor-ingestion'), useValue: { add: jest.fn() } },
         { provide: DataSource, useValue: makeMockDataSource() },
         {
           provide: SensorProjectAccessService,
@@ -820,6 +847,7 @@ describe('SensorsService — getReadings', () => {
         { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
         { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
         { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+        { provide: getQueueToken('sensor-ingestion'), useValue: { add: jest.fn() } },
         { provide: DataSource, useValue: makeMockDataSource() },
         {
           provide: SensorProjectAccessService,
@@ -920,6 +948,7 @@ describe('SensorsService — getAggregatedSummary', () => {
         { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
         { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
         { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+        { provide: getQueueToken('sensor-ingestion'), useValue: { add: jest.fn() } },
         { provide: DataSource, useValue: makeMockDataSource() },
         {
           provide: SensorProjectAccessService,
@@ -1012,6 +1041,7 @@ describe('SensorsService — validateParameters unknown key', () => {
         { provide: getRepositoryToken(SensorDevice), useValue: deviceRepo },
         { provide: getRepositoryToken(SensorReading), useValue: readingRepo },
         { provide: getRepositoryToken(ReadingBatch), useValue: batchRepo },
+        { provide: getQueueToken('sensor-ingestion'), useValue: { add: jest.fn() } },
         { provide: DataSource, useValue: dataSource },
         {
           provide: SensorProjectAccessService,
