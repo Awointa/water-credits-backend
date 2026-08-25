@@ -272,11 +272,14 @@ export class OracleService {
   // ── Nonce-gap detection ─────────────────────────────────────────────────
 
   /**
-   * Logs a warning when the local max confirmed nonce diverges from the
-   * on-chain oracle nonce by more than 1 (indicating a missed or desynced
-   * submission).
+   * Compares the local max confirmed nonce against the on-chain oracle nonce
+   * and returns the signed drift (`onChain - local`).
+   *
+   * Returns `null` when the RPC call fails (error is swallowed so a
+   * transient network blip never blocks a submission cycle). Logs a warning
+   * when `|diff| > 1`.
    */
-  async detectNonceDrift(oracleContractId: string, oracleAddress: string): Promise<void> {
+  async detectNonceDrift(oracleContractId: string, oracleAddress: string): Promise<number | null> {
     const localMax = await this.submissionRepo.findOne({
       where: { oracleAddress, status: SubmissionStatus.CONFIRMED },
       order: { nonce: 'DESC' },
@@ -288,7 +291,7 @@ export class OracleService {
       onChainNonce = await this.stellarService.getOracleNonce(oracleContractId, oracleAddress);
     } catch {
       this.logger.warn(`detectNonceDrift: could not read on-chain nonce for ${oracleAddress}`);
-      return;
+      return null;
     }
 
     const diff = onChainNonce - localNonce;
@@ -298,6 +301,7 @@ export class OracleService {
           `local=${localNonce} on-chain=${onChainNonce} diff=${diff}`,
       );
     }
+    return diff;
   }
 
   /**

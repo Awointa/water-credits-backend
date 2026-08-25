@@ -223,6 +223,15 @@ export class OracleSchedulerService implements OnModuleInit, OnApplicationShutdo
 
       await this.recordScheduleState(GLOBAL_SCHEDULE_SCOPE, startedAt, submitted);
 
+      // Post-cycle nonce-drift check — runs after all batches have been
+      // enqueued so it doesn't add latency to the submission hot-path.
+      // Requires ORACLE_CONTRACT_ID; silently skipped when unconfigured.
+      const oracleContractId = this.configService.get<string>('oracle.contractId', '');
+      if (oracleContractId) {
+        const drift = await this.oracleService.detectNonceDrift(oracleContractId, oracleAddress);
+        await this.recordNonceDrift(drift);
+      }
+
       if (submitted === 0 && failed > 0) {
         this.consecutiveMisses++;
         const threshold = this.configService.get<number>('oracle.missedSubmissionsThreshold', 3);
@@ -386,6 +395,23 @@ export class OracleSchedulerService implements OnModuleInit, OnApplicationShutdo
       this.logger.warn(
         `Could not record schedule state for "${scopeId}": ${(error as Error).message}`,
       );
+    }
+  }
+
+  /**
+   * Persists the most recent nonce drift value on the global schedule-state
+   * row so `GET /health` can surface it without making a live RPC call.
+   *
+   * Errors are swallowed — drift bookkeeping must never fail a cycle.
+   */
+  private async recordNonceDrift(drift: number | null): Promise<void> {
+    try {
+      await this.scheduleStateRepo.upsert(
+        { scopeId: GLOBAL_SCHEDULE_SCOPE, lastNonceDrift: drift },
+        ['scopeId'],
+      );
+    } catch (error) {
+      this.logger.warn(`Could not record nonce drift: ${(error as Error).message}`);
     }
   }
 
